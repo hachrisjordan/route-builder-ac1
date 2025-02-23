@@ -41,7 +41,6 @@
   },
   "devDependencies": {
     "eslint": "^8.57.1",
-    "eslint-config-next": "^15.1.7",
     "eslint-config-react-app": "^7.0.1"
   }
 }
