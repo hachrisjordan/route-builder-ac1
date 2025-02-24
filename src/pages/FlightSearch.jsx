@@ -184,6 +184,48 @@ const FlightSearch = () => {
       width: 120,
       align: 'right',
     },
+    {
+      title: 'Y %',
+      dataIndex: 'Ynet',
+      width: 150,
+      render: (text) => text || '-',
+      sorter: (a, b) => {
+        const getPercent = (str) => {
+          if (!str) return 0;
+          const match = str.match(/^(-?\d+)/);
+          return match ? parseInt(match[0]) : 0;
+        };
+        return getPercent(a.Ynet) - getPercent(b.Ynet);
+      },
+    },
+    {
+      title: 'J %',
+      dataIndex: 'Jnet',
+      width: 150,
+      render: (text) => text || '-',
+      sorter: (a, b) => {
+        const getPercent = (str) => {
+          if (!str) return 0;
+          const match = str.match(/^(-?\d+)/);
+          return match ? parseInt(match[0]) : 0;
+        };
+        return getPercent(a.Jnet) - getPercent(b.Jnet);
+      },
+    },
+    {
+      title: 'F %',
+      dataIndex: 'Fnet',
+      width: 150,
+      render: (text) => text || '-',
+      sorter: (a, b) => {
+        const getPercent = (str) => {
+          if (!str) return 0;
+          const match = str.match(/^(-?\d+)/);
+          return match ? parseInt(match[0]) : 0;
+        };
+        return getPercent(a.Fnet) - getPercent(b.Fnet);
+      },
+    },
   ];
 
   const handleSearch = async () => {
@@ -237,15 +279,24 @@ const FlightSearch = () => {
 
   // Filter function for the table data
   const getFilteredData = () => {
-    if (!searchResults || !tableSearchText) return searchResults?.routes;
-    
-    const searchTerms = tableSearchText.toLowerCase().split(/\s+/).filter(term => term);
-    
+    if (!searchResults?.routes || !tableSearchText) {
+      return searchResults?.routes || [];
+    }
+
+    const searchLower = tableSearchText.toLowerCase();
     return searchResults.routes.filter(route => {
-      const routeString = `${route.departure} ${route.arrival} ${route.connections.join(' ')}`.toLowerCase();
-      
-      // Check if all search terms are present in any order
-      return searchTerms.every(term => routeString.includes(term));
+      // Convert all relevant fields to strings and check if they include the search text
+      return (
+        route.departure.toLowerCase().includes(searchLower) ||
+        route.arrival.toLowerCase().includes(searchLower) ||
+        route.connections.join(' ').toLowerCase().includes(searchLower) ||
+        route.YPrice.toString().includes(searchLower) ||
+        route.JPrice.toString().includes(searchLower) ||
+        route.FPrice.toString().includes(searchLower) ||
+        (route.Ynet || '').toLowerCase().includes(searchLower) ||
+        (route.Jnet || '').toLowerCase().includes(searchLower) ||
+        (route.Fnet || '').toLowerCase().includes(searchLower)
+      );
     });
   };
 
@@ -344,7 +395,9 @@ const FlightSearch = () => {
             }}
             loading={isLoading}
             onChange={handleTableChange}
-            scroll={{ x: 1010 }}
+            scroll={{ x: 1460 }}
+            showSorterTooltip={true}
+            sortDirections={['ascend', 'descend']}
           />
         </Card>
       )}
