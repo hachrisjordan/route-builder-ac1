@@ -105,12 +105,6 @@ const FlightSearch = () => {
       width: 100,
     },
     {
-      title: 'Destination',
-      dataIndex: 'arrival',
-      sorter: (a, b) => a.arrival.localeCompare(b.arrival),
-      width: 100,
-    },
-    {
       title: 'Connections',
       key: 'connections',
       render: (_, record) => (
@@ -120,7 +114,22 @@ const FlightSearch = () => {
             : '-'}
         </span>
       ),
-      width: 300,
+      width: 225,
+      sorter: (a, b) => {
+        // First sort by number of connections
+        if (a.connections.length !== b.connections.length) {
+          return a.connections.length - b.connections.length;
+        }
+        // If same number of connections, sort alphabetically
+        return a.connections.join('').localeCompare(b.connections.join(''));
+      },
+      sortDirections: ['ascend', 'descend'],
+    },
+    {
+      title: 'Destination',
+      dataIndex: 'arrival',
+      sorter: (a, b) => a.arrival.localeCompare(b.arrival),
+      width: 100,
     },
     {
       title: 'Stops',
