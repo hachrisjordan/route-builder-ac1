@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
-import { Select, InputNumber, Button, Table, Card, Tag, Spin, Input } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Select, InputNumber, Button, Table, Card, Tag, Spin, Input, Modal, DatePicker } from 'antd';
+import { SearchOutlined, DownOutlined } from '@ant-design/icons';
 import { airports } from '../data/airports';
 import airlines from '../data/airlines';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import routeDetails from '../data/route_details.json';
+dayjs.extend(utc);
 
 const FlightSearch = () => {
   const [departure, setDeparture] = useState(null);
@@ -22,6 +26,12 @@ const FlightSearch = () => {
     maxSegments: false
   });
   const [tableSearchText, setTableSearchText] = useState('');
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [selectedDates, setSelectedDates] = useState(null);
+  const [currentRoute, setCurrentRoute] = useState(null);
+  const [apiKey, setApiKey] = useState('');
+  const [segmentDetails, setSegmentDetails] = useState([]);
+  const [isLoadingSegments, setIsLoadingSegments] = useState(false);
 
   // Sort airlines alphabetically
   const sortedAirlines = [...airlines]
@@ -102,7 +112,7 @@ const FlightSearch = () => {
       title: 'Origin',
       dataIndex: 'departure',
       sorter: (a, b) => a.departure.localeCompare(b.departure),
-      width: 100,
+      width: 80,
     },
     {
       title: 'Connections',
@@ -114,13 +124,11 @@ const FlightSearch = () => {
             : '-'}
         </span>
       ),
-      width: 225,
+      width: 200,
       sorter: (a, b) => {
-        // First sort by number of connections
         if (a.connections.length !== b.connections.length) {
           return a.connections.length - b.connections.length;
         }
-        // If same number of connections, sort alphabetically
         return a.connections.join('').localeCompare(b.connections.join(''));
       },
       sortDirections: ['ascend', 'descend'],
@@ -129,7 +137,7 @@ const FlightSearch = () => {
       title: 'Destination',
       dataIndex: 'arrival',
       sorter: (a, b) => a.arrival.localeCompare(b.arrival),
-      width: 100,
+      width: 80,
     },
     {
       title: 'Stops',
@@ -138,20 +146,11 @@ const FlightSearch = () => {
       render: (num) => {
         let color;
         switch (num) {
-          case 0:
-            color = 'green';
-            break;
-          case 1:
-            color = 'blue';
-            break;
-          case 2:
-            color = 'orange';
-            break;
-          case 3:
-            color = 'gold';
-            break;
-          default:
-            color = 'red';
+          case 0: color = 'green'; break;
+          case 1: color = 'blue'; break;
+          case 2: color = 'orange'; break;
+          case 3: color = 'gold'; break;
+          default: color = 'red';
         }
         return (
           <Tag color={color}>
@@ -159,14 +158,14 @@ const FlightSearch = () => {
           </Tag>
         );
       },
-      width: 100,
+      width: 80,
     },
     {
       title: 'Distance',
       dataIndex: 'totalDistance',
       sorter: (a, b) => a.totalDistance - b.totalDistance,
       render: (distance) => distance.toLocaleString(),
-      width: 120,
+      width: 60,
       align: 'right',
     },
     {
@@ -174,7 +173,7 @@ const FlightSearch = () => {
       dataIndex: 'YPrice',
       sorter: (a, b) => a.YPrice - b.YPrice,
       render: (price) => price.toLocaleString(),
-      width: 120,
+      width: 80,
       align: 'right',
     },
     {
@@ -182,7 +181,7 @@ const FlightSearch = () => {
       dataIndex: 'JPrice',
       sorter: (a, b) => a.JPrice - b.JPrice,
       render: (price) => price.toLocaleString(),
-      width: 120,
+      width: 80,
       align: 'right',
     },
     {
@@ -190,13 +189,13 @@ const FlightSearch = () => {
       dataIndex: 'FPrice',
       sorter: (a, b) => a.FPrice - b.FPrice,
       render: (price) => price.toLocaleString(),
-      width: 120,
+      width: 80,
       align: 'right',
     },
     {
       title: 'Y %',
       dataIndex: 'Ynet',
-      width: 150,
+      width: 160,
       render: (text) => text || '-',
       sorter: (a, b) => {
         const getPercent = (str) => {
@@ -210,7 +209,7 @@ const FlightSearch = () => {
     {
       title: 'J %',
       dataIndex: 'Jnet',
-      width: 150,
+      width: 160,
       render: (text) => text || '-',
       sorter: (a, b) => {
         const getPercent = (str) => {
@@ -224,7 +223,7 @@ const FlightSearch = () => {
     {
       title: 'F %',
       dataIndex: 'Fnet',
-      width: 150,
+      width: 160,
       render: (text) => text || '-',
       sorter: (a, b) => {
         const getPercent = (str) => {
@@ -235,6 +234,22 @@ const FlightSearch = () => {
         return getPercent(a.Fnet) - getPercent(b.Fnet);
       },
     },
+    {
+      title: '',
+      key: 'actions',
+      width: 20,
+      render: (_, record) => (
+        <Button 
+          type="link" 
+          icon={<DownOutlined />}
+          onClick={() => {
+            const fullRoute = [record.departure, ...record.connections, record.arrival];
+            setCurrentRoute(fullRoute);
+            setIsModalVisible(true);
+          }}
+        />
+      ),
+    }
   ];
 
   const handleSearch = async () => {
@@ -308,6 +323,96 @@ const FlightSearch = () => {
       );
     });
   };
+
+  const formatTime = (dateStr, baseDate) => {
+    const date = dayjs(dateStr);
+    const base = dayjs(baseDate);
+    const dayDiff = date.diff(base, 'day');
+    const timeStr = date.format('HH:mm');
+    return dayDiff > 0 ? `${timeStr} (+${dayDiff})` : timeStr;
+  };
+
+  const getAirlineName = (code) => {
+    const airline = airlines.find(a => a.value === code);
+    return airline ? airline.label.replace(` (${code})`, '') : code;
+  };
+
+  const handleDateSearch = async () => {
+    if (!selectedDates || !currentRoute || !apiKey) return;
+    
+    setIsLoadingSegments(true);
+    const dateStr = selectedDates.format('YYYY-MM-DD');
+    const segments = [];
+    
+    // Get segments from route_details.json
+    for (let i = 0; i < currentRoute.length - 1; i++) {
+      const origin = currentRoute[i];
+      const destination = currentRoute[i + 1];
+      
+      const route = routeDetails.find(r => 
+        r.origin === origin && 
+        r.destination === destination && 
+        r.date === dateStr
+      );
+      
+      if (route) {
+        segments.push(route.ID);
+      }
+    }
+
+    try {
+      const results = await Promise.all(
+        segments.map(async (segmentId) => {
+          const response = await fetch(`http://localhost:8080/api/seats/${segmentId}`, {
+            method: 'GET',
+            headers: {
+              'accept': 'application/json',
+              'Partner-Authorization': apiKey
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch segment data');
+          }
+          
+          return response.json();
+        })
+      );
+
+      // Filter and process results
+      const processedSegments = results.flatMap(result => 
+        (result.data || [])
+          .filter(trip => trip.Stops === 0)
+          .map(trip => ({
+            from: trip.OriginAirport,
+            to: trip.DestinationAirport,
+            flightNumber: trip.FlightNumbers,
+            airlines: getAirlineName(trip.Carriers),
+            aircraft: trip.Aircraft[0],
+            departs: formatTime(trip.DepartsAt, dateStr),
+            arrives: formatTime(trip.ArrivesAt, dateStr),
+            cabin: trip.Cabin.charAt(0).toUpperCase() + trip.Cabin.slice(1)
+          }))
+      );
+
+      setSegmentDetails(processedSegments);
+    } catch (error) {
+      console.error('Error fetching segment details:', error);
+    } finally {
+      setIsLoadingSegments(false);
+    }
+  };
+
+  const segmentColumns = [
+    { title: 'From', dataIndex: 'from', width: 80 },
+    { title: 'To', dataIndex: 'to', width: 80 },
+    { title: 'Flight', dataIndex: 'flightNumber', width: 100 },
+    { title: 'Airlines', dataIndex: 'airlines', width: 150 },
+    { title: 'Aircraft', dataIndex: 'aircraft', width: 150 },
+    { title: 'Departs', dataIndex: 'departs', width: 100 },
+    { title: 'Arrives', dataIndex: 'arrives', width: 100 },
+    { title: 'Cabin', dataIndex: 'cabin', width: 100 },
+  ];
 
   return (
     <div className="flight-search-container">
@@ -404,12 +509,57 @@ const FlightSearch = () => {
             }}
             loading={isLoading}
             onChange={handleTableChange}
-            scroll={{ x: 1460 }}
+            scroll={{ x: 1600 }}
             showSorterTooltip={true}
             sortDirections={['ascend', 'descend']}
           />
         </Card>
       )}
+
+      <Modal
+        title="Flight Details"
+        open={isModalVisible}
+        onOk={handleDateSearch}
+        onCancel={() => {
+          setIsModalVisible(false);
+          setSelectedDates(null);
+          setApiKey('');
+          setSegmentDetails([]);
+        }}
+        okText="Search Flights"
+        okButtonProps={{ 
+          disabled: !selectedDates || !apiKey,
+          loading: isLoadingSegments 
+        }}
+        width={900}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 8 }}>Select Travel Date:</div>
+          <DatePicker
+            style={{ width: '100%' }}
+            onChange={(date) => setSelectedDates(date)}
+            disabledDate={(current) => current && current < dayjs().startOf('day')}
+          />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 8 }}>API Key:</div>
+          <Input
+            placeholder="Enter API key"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            style={{ width: '100%' }}
+          />
+        </div>
+        {segmentDetails.length > 0 && (
+          <Table
+            dataSource={segmentDetails}
+            columns={segmentColumns}
+            pagination={false}
+            size="small"
+            rowKey={(record, index) => index}
+          />
+        )}
+      </Modal>
 
       <style jsx>{`
         .flight-search-container {
