@@ -395,9 +395,25 @@ const FlightSearch = () => {
         
         firstSegment.flights = firstSegment.flights.filter(flight => {
           const arrivalTime = dayjs(flight.ArrivesAt);
-          const isValid = arrivalTime.isBefore(earliestSecondDeparture);
-          console.log(`  Checking ${flight.flightNumber}: arrives ${arrivalTime.format('YYYY-MM-DD HH:mm')} - ${isValid ? 'keep' : 'remove'}`);
-          return isValid;
+          const arrivalDate = arrivalTime.format('YYYY-MM-DD');
+          const departureDate = earliestSecondDeparture.format('YYYY-MM-DD');
+          
+          // If arrival is on an earlier date, keep it
+          if (arrivalDate < departureDate) {
+            console.log(`  Checking ${flight.flightNumber}: arrives ${arrivalTime.format('YYYY-MM-DD HH:mm')} - keep (earlier date)`);
+            return true;
+          }
+          
+          // If same date, compare times
+          if (arrivalDate === departureDate) {
+            const isValid = arrivalTime.isBefore(earliestSecondDeparture);
+            console.log(`  Checking ${flight.flightNumber}: arrives ${arrivalTime.format('YYYY-MM-DD HH:mm')} - ${isValid ? 'keep' : 'remove'} (same date)`);
+            return isValid;
+          }
+          
+          // If arrival is on a later date, remove it
+          console.log(`  Checking ${flight.flightNumber}: arrives ${arrivalTime.format('YYYY-MM-DD HH:mm')} - remove (later date)`);
+          return false;
         });
 
         // Update arrival bounds if needed
