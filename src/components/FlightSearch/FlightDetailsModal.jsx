@@ -123,8 +123,10 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
           {currentRoute && currentRoute.slice(0, -1).map((from, index) => {
             const to = currentRoute[index + 1];
             const routeKey = `${from}-${to}`;
+            
+            // Filter flights by segmentIndex instead of from/to
             const flights = segmentDetails.filter(flight => 
-              flight.from === from && flight.to === to
+              flight.segmentIndex === index
             );
 
             return (
@@ -137,7 +139,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                   dataSource={flights}
                   columns={columns}
                   size="small"
-                  rowKey={(record, index) => `${routeKey}-${index}`}
+                  rowKey={(record) => `${record.flightNumber}_${record.DepartsAt}_${record.segmentIndex}`}
                   sortDirections={['ascend', 'descend']}
                   style={{ 
                     width: '100%',

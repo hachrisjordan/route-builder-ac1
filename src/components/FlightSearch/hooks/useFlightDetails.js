@@ -100,7 +100,12 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         return true;
       })
       .forEach(trip => {
-        const flightNumber = trip.FlightNumbers;
+        // Convert CL carrier and flight numbers to LH
+        const carrier = trip.Carriers === 'CL' ? 'LH' : trip.Carriers;
+        const flightNumber = trip.FlightNumbers.startsWith('CL') 
+          ? `LH${trip.FlightNumbers.slice(2)}` 
+          : trip.FlightNumbers;
+
         const departureTime = dayjs(trip.DepartsAt.replace('Z', ''));
         const existingFlight = flights[flightNumber];
 
@@ -127,7 +132,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
           from: trip.OriginAirport,
           to: trip.DestinationAirport,
           flightNumber: flightNumber,
-          airlines: getAirlineName(trip.Carriers),
+          airlines: getAirlineName(carrier),
           aircraft: aircraftName,
           duration: trip.TotalDuration,
           departs: departDayDiff > 0 ? 
@@ -448,100 +453,97 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
   };
 
   const handleFlightSelect = (flight, segmentIndex) => {
-    const flightKey = `${flight.flightNumber}_${dayjs(flight.DepartsAt).format('YYYY-MM-DD')}`;
-    console.log('Selected flight:', flightKey, 'from segment:', segmentIndex);
+    const flightKey = `${flight.flightNumber}_${dayjs(flight.DepartsAt).format('YYYY-MM-DD HH:mm')}`;
+    console.log('\nAttempting to select/deselect:', flightKey, 'in segment:', segmentIndex);
     
-    // Create new selected flights object
-    const newSelected = { ...selectedFlights };
-    
-    // Toggle selection
-    if (newSelected[segmentIndex] && 
-        `${newSelected[segmentIndex].flightNumber}_${dayjs(newSelected[segmentIndex].DepartsAt).format('YYYY-MM-DD')}` === flightKey) {
-      delete newSelected[segmentIndex];
-      console.log('Deselected flight');
-    } else {
-      newSelected[segmentIndex] = flight;
-      console.log('Selected flight');
-    }
-    
-    setSelectedFlights(newSelected);
-    
-    if (Object.keys(newSelected).length > 0) {
-      // Find ALL valid combinations that include the selected flight
-      const validCombos = validCombinations.filter(combo => {
-        const selectedFlight = combo[segmentIndex];
-        return selectedFlight.flightNumber === flight.flightNumber &&
-               dayjs(selectedFlight.DepartsAt).isSame(dayjs(flight.DepartsAt));
+    setSelectedFlights(prevSelected => {
+      const newSelected = { ...prevSelected };
+      
+      // Check if this exact flight is already selected
+      const isCurrentlySelected = newSelected[segmentIndex]?.some?.(f => {
+        const matches = f.flightNumber === flight.flightNumber && 
+                       dayjs(f.DepartsAt).isSame(dayjs(flight.DepartsAt));
+        if (matches) {
+          console.log(`Found existing selection: ${f.flightNumber} (${dayjs(f.DepartsAt).format('MM-DD HH:mm')}) in segment ${segmentIndex}`);
+        }
+        return matches;
       });
 
-      console.log(`Found ${validCombos.length} valid combinations with ${flight.flightNumber}`);
+      if (isCurrentlySelected) {
+        // Remove only this specific flight from the selection
+        console.log(`\nDESELECTING: ${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')}) from segment ${segmentIndex}`);
+        newSelected[segmentIndex] = newSelected[segmentIndex].filter(f => {
+          const keep = !(f.flightNumber === flight.flightNumber && 
+                        dayjs(f.DepartsAt).isSame(dayjs(flight.DepartsAt)));
+          if (!keep) {
+            console.log(`Removed flight: ${f.flightNumber} (${dayjs(f.DepartsAt).format('MM-DD HH:mm')})`);
+          }
+          return keep;
+        });
+        if (newSelected[segmentIndex].length === 0) {
+          console.log(`Removing empty segment ${segmentIndex}`);
+          delete newSelected[segmentIndex];
+        }
+      } else {
+        // Add this flight to the selections
+        if (!newSelected[segmentIndex]) {
+          newSelected[segmentIndex] = [];
+        }
+        newSelected[segmentIndex].push(flight);
+        console.log(`\nSELECTING: ${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')}) in segment ${segmentIndex}`);
+      }
 
-      // Get all valid flights from these combinations
-      const validFlights = new Set();
-      validCombos.forEach(combo => {
-        combo.forEach((f, idx) => {
-          validFlights.add(`${f.flightNumber}_${dayjs(f.DepartsAt).format('YYYY-MM-DD HH:mm')}_${idx}`);
+      // Log all current selections
+      console.log('\nALL CURRENT SELECTIONS:');
+      Object.entries(newSelected).forEach(([idx, flights]) => {
+        if (Array.isArray(flights)) {
+          flights.forEach(f => {
+            console.log(`Segment ${idx}: ${f.flightNumber} (${dayjs(f.DepartsAt).format('MM-DD HH:mm')})`);
+          });
+        }
+      });
+
+      // Find valid combinations that include ANY of the selected flights per segment
+      const validCombos = validCombinations.filter(combo => {
+        return Object.entries(newSelected).every(([selectedSegmentIndex, selectedFlights]) => {
+          const comboFlight = combo[selectedSegmentIndex];
+          return selectedFlights.some(selectedFlight => 
+            comboFlight && 
+            comboFlight.flightNumber === selectedFlight.flightNumber && 
+            dayjs(comboFlight.DepartsAt).isSame(dayjs(selectedFlight.DepartsAt))
+          );
         });
       });
 
-      // Deduplicate and update segment details
+      console.log(`\nFound ${validCombos.length} valid combinations with selected flights`);
+
+      // Filter and process flights
       const filteredFlights = validCombos.flatMap(combo => 
         combo.map((f, idx) => ({
           ...f,
-          isSelected: idx === segmentIndex && f.flightNumber === flight.flightNumber,
+          isSelected: newSelected[idx]?.some(sf => 
+            sf.flightNumber === f.flightNumber && 
+            dayjs(sf.DepartsAt).isSame(dayjs(f.DepartsAt))
+          ) || false,
           segmentIndex: idx
         }))
       );
 
-      // Remove duplicates while preserving order
-      const seenFlights = new Set();
+      // Remove duplicates while preserving selections
+      const seenFlights = new Map();
       const uniqueFlights = filteredFlights.filter(f => {
         const key = `${f.flightNumber}_${dayjs(f.DepartsAt).format('YYYY-MM-DD HH:mm')}_${f.segmentIndex}`;
         if (!seenFlights.has(key)) {
-          seenFlights.add(key);
+          seenFlights.set(key, f.isSelected);
           return true;
         }
+        f.isSelected = f.isSelected || seenFlights.get(key);
         return false;
       });
 
       setSegmentDetails(uniqueFlights);
-    } else {
-      // When deselecting, show all unique flights from valid combinations
-      const allValidFlights = new Map(); // Use Map to track flights by segment
-      
-      validCombinations.forEach(combo => {
-        combo.forEach((f, idx) => {
-          const segmentKey = `${f.from}-${f.to}`;
-          if (!allValidFlights.has(segmentKey)) {
-            allValidFlights.set(segmentKey, new Map());
-          }
-          
-          const flightKey = `${f.flightNumber}_${dayjs(f.DepartsAt).format('YYYY-MM-DD HH:mm')}`;
-          if (!allValidFlights.get(segmentKey).has(flightKey)) {
-            allValidFlights.get(segmentKey).set(flightKey, {
-              ...f,
-              isSelected: false,
-              segmentIndex: idx
-            });
-          }
-        });
-      });
-
-      // Flatten the Map of Maps into an array
-      const resetFlights = Array.from(allValidFlights.values())
-        .flatMap(segmentFlights => Array.from(segmentFlights.values()));
-      
-      console.log('\n=== Resetting to All Valid Flights ===');
-      Array.from(allValidFlights.entries()).forEach(([route, flights]) => {
-        console.log(`\n${route}:`);
-        Array.from(flights.values())
-          .sort((a, b) => dayjs(a.DepartsAt).valueOf() - dayjs(b.DepartsAt).valueOf())
-          .forEach(f => console.log(`  ${f.flightNumber} (${dayjs(f.DepartsAt).format('MM-DD HH:mm')})`));
-      });
-      console.log('\n======================');
-
-      setSegmentDetails(resetFlights);
-    }
+      return newSelected;
+    });
   };
 
   const columns = useMemo(() => {

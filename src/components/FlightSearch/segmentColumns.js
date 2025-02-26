@@ -49,10 +49,12 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
       render: (_, record) => (
         <input 
           type="checkbox" 
-          checked={!!record.isSelected}
-          onChange={() => {
-            onFlightSelect(record, record.segmentIndex);
-          }}
+          checked={record.isSelected}
+          onChange={() => onFlightSelect(record, record.segmentIndex)}
+          // Allow multiple selections
+          style={{ cursor: 'pointer' }}
+          // Remove any default behavior that might prevent multiple selections
+          onClick={(e) => e.stopPropagation()}
         />
       )
     },
