@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Card, Typography, Badge } from 'antd';
 import dayjs from 'dayjs';
 
@@ -10,6 +10,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
   const [selectionStart, setSelectionStart] = useState(null);
   const [selectionEnd, setSelectionEnd] = useState(null);
   const [error, setError] = useState('');
+  const [showCalendar, setShowCalendar] = useState(false);
 
   // Get days in month
   const getDaysInMonth = (year, month) => {
@@ -166,153 +167,180 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
            date.isBefore(end.add(1, 'day'));
   };
 
+  const handleApplyClick = () => {
+    setShowCalendar(true);
+  };
+
+  // Add useEffect to show calendar when flightData changes
+  useEffect(() => {
+    if (flightData && Object.keys(flightData).length > 0) {
+      setShowCalendar(true);
+    }
+  }, [flightData]);
+
   return (
-    <div style={{ padding: '20px' }}>
-      {/* Calendar header */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '20px' 
-      }}>
-        <Button 
-          type="primary"
-          onClick={goToPrevMonth}
-          style={{ backgroundColor: '#1677ff' }}
-        >
-          &larr;
+    <div>
+      {!showCalendar && (
+        <Button onClick={handleApplyClick}>
+          Show Calendar
         </Button>
-        <Title level={4} style={{ margin: 0 }}>{monthNames[currentMonth]} {currentYear}</Title>
-        <Button 
-          type="primary"
-          onClick={goToNextMonth}
-          style={{ backgroundColor: '#1677ff' }}
-        >
-          &rarr;
-        </Button>
-      </div>
-
-      {/* Calendar grid */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(7, 1fr)',
-        border: '1px solid #f0f0f0',
-        backgroundColor: '#f0f0f0',
-        gap: '1px',
-        fontFamily: 'Menlo, monospace'
-      }}>
-        {/* Day headers */}
-        {dayNames.map(day => (
-          <div key={day} style={{ 
-            backgroundColor: '#f5f5f5',
-            padding: '8px',
-            textAlign: 'center',
-            fontWeight: '500'
+      )}
+      
+      {showCalendar && (
+        <div style={{ padding: '20px' }}>
+          {/* Calendar header */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '20px' 
           }}>
-            {day}
-          </div>
-        ))}
-
-        {/* Calendar cells */}
-        {Array.from({ length: firstDayOfMonth }).map((_, index) => (
-          <div key={`empty-${index}`} style={{ 
-            backgroundColor: 'white',
-            minHeight: '120px',
-            padding: '8px'
-          }} />
-        ))}
-
-        {Array.from({ length: daysInMonth }).map((_, index) => {
-          const day = index + 1;
-          const dateString = formatDate(currentYear, currentMonth, day);
-          const flights = flightData[dateString] || [];
-          const validFlights = flights.length > 0 ? sortSegments(flights) : [];
-          const showFlights = validFlights.length > 0 && hasAnyAvailability(validFlights);
-          const isSelected = isDateInRange(dateString);
-          const isStart = dateString === selectionStart;
-          const isEnd = dateString === selectionEnd;
-
-          return (
-            <div
-              key={`day-${day}`}
-              style={{
-                backgroundColor: isSelected ? '#e6f4ff' : 'white',
-                minHeight: '120px',
-                padding: '8px',
-                fontFamily: 'Menlo, monospace',
-                cursor: 'pointer',
-                border: isStart || isEnd ? '2px solid #1890ff' : 'none'
-              }}
-              onClick={() => handleDateClick(dateString)}
+            <Button 
+              type="primary"
+              onClick={goToPrevMonth}
+              style={{ backgroundColor: '#1677ff' }}
             >
-              <div style={{ 
-                fontWeight: 'bold', 
-                marginBottom: '8px',
-                fontSize: '13px'
+              &larr;
+            </Button>
+            <Title level={4} style={{ margin: 0 }}>{monthNames[currentMonth]} {currentYear}</Title>
+            <Button 
+              type="primary"
+              onClick={goToNextMonth}
+              style={{ backgroundColor: '#1677ff' }}
+            >
+              &rarr;
+            </Button>
+          </div>
+
+          {/* Calendar grid */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(7, 1fr)',
+            border: '1px solid #f0f0f0',
+            backgroundColor: '#f0f0f0',
+            gap: '1px',
+            fontFamily: 'Menlo, monospace'
+          }}>
+            {/* Day headers */}
+            {dayNames.map(day => (
+              <div key={day} style={{ 
+                backgroundColor: '#f5f5f5',
+                padding: '8px',
+                textAlign: 'center',
+                fontWeight: '500'
               }}>
                 {day}
               </div>
-              {showFlights ? (
-                <div style={{ fontSize: '12px' }}>
-                  {validFlights.map((segment, idx) => (
-                    <div 
-                      key={idx} 
-                      style={{ 
-                        marginBottom: '4px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}
-                    >
-                      <div style={{ 
-                        fontSize: '14px',
-                        fontFamily: 'Menlo, monospace'
-                      }}>
-                        {segment.route}
-                      </div>
-                      {renderAvailabilityBadges(segment.route, segment.classes)}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ 
-                  textAlign: 'center', 
-                  color: '#999', 
-                  fontSize: '12px',
-                  marginTop: '32px',
-                  fontFamily: 'Menlo, monospace'
-                }}>
-                  No flights
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            ))}
 
-      {error && (
-        <div style={{ 
-          color: '#ff4d4f', 
-          marginTop: '16px',
-          textAlign: 'center' 
-        }}>
-          {error}
+            {/* Calendar cells */}
+            {Array.from({ length: firstDayOfMonth }).map((_, index) => (
+              <div key={`empty-${index}`} style={{ 
+                backgroundColor: 'white',
+                minHeight: '120px',
+                padding: '8px'
+              }} />
+            ))}
+
+            {Array.from({ length: daysInMonth }).map((_, index) => {
+              const day = index + 1;
+              const dateString = formatDate(currentYear, currentMonth, day);
+              const flights = flightData[dateString] || [];
+              const validFlights = flights.length > 0 ? sortSegments(flights) : [];
+              const showFlights = validFlights.length > 0 && hasAnyAvailability(validFlights);
+              const isSelected = isDateInRange(dateString);
+              const isStart = dateString === selectionStart;
+              const isEnd = dateString === selectionEnd;
+
+              return (
+                <div
+                  key={`day-${day}`}
+                  style={{
+                    backgroundColor: isSelected ? '#e6f4ff' : 'white',
+                    minHeight: '120px',
+                    padding: '8px',
+                    fontFamily: 'Menlo, monospace',
+                    cursor: 'pointer',
+                    border: isStart || isEnd ? '2px solid #1890ff' : 'none'
+                  }}
+                  onClick={() => handleDateClick(dateString)}
+                >
+                  <div style={{ 
+                    fontWeight: 'bold', 
+                    marginBottom: '8px',
+                    fontSize: '13px'
+                  }}>
+                    {day}
+                  </div>
+                  {showFlights ? (
+                    <div style={{ fontSize: '12px' }}>
+                      {validFlights.map((segment, idx) => (
+                        <div 
+                          key={idx} 
+                          style={{ 
+                            marginBottom: '4px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <div style={{ 
+                            fontSize: '14px',
+                            fontFamily: 'Menlo, monospace'
+                          }}>
+                            {segment.route}
+                          </div>
+                          {renderAvailabilityBadges(segment.route, segment.classes)}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      textAlign: 'center', 
+                      color: '#999', 
+                      fontSize: '12px',
+                      marginTop: '32px',
+                      fontFamily: 'Menlo, monospace'
+                    }}>
+                      No flights
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {error && (
+            <div style={{ 
+              color: '#ff4d4f', 
+              marginTop: '16px',
+              textAlign: 'center' 
+            }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ 
+            marginTop: '16px',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '8px'
+          }}>
+            <Button
+              type="primary"
+              onClick={onSearch}
+              disabled={!selectionStart || !selectionEnd}
+            >
+              Search
+            </Button>
+            <Button
+              onClick={() => setShowCalendar(false)}
+            >
+              Hide Calendar
+            </Button>
+          </div>
         </div>
       )}
-
-      <div style={{ 
-        marginTop: '16px',
-        display: 'flex',
-        justifyContent: 'center' 
-      }}>
-        <Button
-          type="primary"
-          onClick={onSearch}
-          disabled={!selectionStart || !selectionEnd}
-        >
-          Search
-        </Button>
-      </div>
     </div>
   );
 };

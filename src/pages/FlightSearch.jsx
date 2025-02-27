@@ -51,18 +51,36 @@ const FlightSearch = () => {
       <style jsx>{`
         .flight-search-container {
           max-width: 1200px;
+          width: 100%;
           margin: 20px auto;
-          padding: 0 20px;
+          padding: 0 12px;
+          box-sizing: border-box;
         }
         :global(.ant-table-wrapper) {
           margin: 0;
           width: 100%;
+          overflow-x: auto;
         }
         :global(.ant-card) {
           margin-bottom: 20px;
+          width: 100%;
         }
-        :global(.ant-table-container) {
-          overflow-x: auto;
+        :global(.ant-modal) {
+          max-width: 100vw;
+          margin: 0;
+        }
+        :global(.ant-modal-content) {
+          max-height: 100vh;
+          border-radius: 8px;
+        }
+        @media (max-width: 768px) {
+          .flight-search-container {
+            padding: 0 8px;
+            margin: 12px auto;
+          }
+          :global(.ant-modal-content) {
+            border-radius: 0;
+          }
         }
       `}</style>
     </div>

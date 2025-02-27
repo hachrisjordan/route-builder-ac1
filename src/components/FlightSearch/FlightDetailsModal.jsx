@@ -102,19 +102,29 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
       onCancel={handleCancel}
       footer={null}
       width={1600}
+      styles={{
+        body: { 
+          padding: '12px',
+          maxHeight: '90vh',
+          overflow: 'auto'
+        },
+        content: {
+          maxWidth: '100vw'
+        }
+      }}
     >
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: '8px', marginBottom: 16 }}>
           <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
             <Input
-              placeholder="Enter API Key"
+              placeholder="Enter your yapping password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               style={{ flex: 1 }}
             />
             <Button
               type="primary"
-              disabled={!apiKey}
+              disabled={!apiKey || !apiKey.toLowerCase().startsWith('pro')}
               onClick={() => handleCalendarSearch(currentRoute)}
             >
               Apply
