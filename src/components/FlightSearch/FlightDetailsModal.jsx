@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Modal, DatePicker, Input, Spin, Table } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Modal, DatePicker, Input, Spin, Table, Button, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { getSegmentColumns } from './segmentColumns';
 import useFlightDetails from './hooks/useFlightDetails';
+import FlightAvailabilityCalendar from './FlightAvailabilityCalendar';
 const { RangePicker } = DatePicker;
 
 const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
@@ -15,151 +16,151 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
     segmentDetails,
     isLoadingSegments,
     handleDateSearch,
+    handleCalendarSearch,
     resetDetails,
     columns,
     selectedFlights,
+    availabilityData,
+    isLoadingAvailability,
   } = useFlightDetails(getSegmentColumns);
+
+  // Clear data when modal closes
+  useEffect(() => {
+    if (!isVisible) {
+      resetDetails();
+      setDateRangeError(false);
+      setSelectedDates(null);
+      setApiKey('');
+    }
+  }, [isVisible]);
 
   const handleOk = () => {
     handleDateSearch(currentRoute);
   };
 
   const handleCancel = () => {
-    resetDetails();
-    setDateRangeError(false);
     onClose();
+  };
+
+  const handleCalendarDateSelect = (dateRange) => {
+    setSelectedDates(dateRange);
+    setDateRangeError(false);
+  };
+
+  const handleCalendarSearchClick = () => {
+    if (!selectedDates) {
+      setDateRangeError(true);
+      return;
+    }
+    handleDateSearch(currentRoute);
+  };
+
+  // Function to group flights by segment with safety checks
+  const getSegmentTables = () => {
+    if (!segmentDetails?.length || !currentRoute?.length) return [];
+
+    // Group flights by segment index
+    const segmentGroups = segmentDetails.reduce((acc, flight) => {
+      const segmentIndex = flight.segmentIndex;
+      if (!acc[segmentIndex]) {
+        acc[segmentIndex] = [];
+      }
+      acc[segmentIndex].push(flight);
+      return acc;
+    }, {});
+
+    // Convert to array format with segment info
+    return Object.entries(segmentGroups).map(([index, flights]) => {
+      const currentIndex = parseInt(index);
+      const nextIndex = currentIndex + 1;
+      
+      // Safety check for route indices
+      if (nextIndex >= currentRoute.length) return null;
+      
+      const segmentRoute = `${currentRoute[currentIndex]}-${currentRoute[nextIndex]}`;
+      return {
+        index: currentIndex,
+        route: segmentRoute,
+        flights
+      };
+    }).filter(Boolean); // Remove any null entries
+  };
+
+  // Add pagination settings
+  const paginationConfig = {
+    pageSize: 5,
+    showSizeChanger: true,
+    showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} flights`,
+    pageSizeOptions: ['5', '10', '20', '50'],
+    position: ['bottomLeft']
   };
 
   return (
     <Modal
       title="Flight Details"
       open={isVisible}
-      onOk={handleOk}
       onCancel={handleCancel}
-      okText="Search Flights"
-      okButtonProps={{ 
-        disabled: !selectedDates || !apiKey || dateRangeError,
-        loading: isLoadingSegments 
-      }}
-      width={1500}
-      styles={{
-        body: { 
-          padding: '12px',
-          maxWidth: '100%'
-        }
-      }}
+      footer={null}
+      width={1600}
     >
       <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 8 }}>Select Travel Dates (max 3 days):</div>
-        <RangePicker
-          style={{ width: '100%' }}
-          onChange={(dates) => {
-            if (!dates) {
-              setSelectedDates(null);
-              setDateRangeError(false);
-              return;
-            }
-            setSelectedDates(dates);
-          }}
-          disabledDate={(current) => {
-            if (!current) return false;
-            
-            // Disable dates before today
-            const today = dayjs().startOf('day');
-            // Disable dates more than 60 days in the future
-            const maxDate = today.add(60, 'days');
-            
-            // If a start date is selected, only allow selecting up to 3 days after it
-            if (selectedDates?.[0] && !selectedDates[1]) {
-              const maxEndDate = selectedDates[0].add(2, 'days');
-              return current && (
-                current < today || 
-                current > maxDate
-              );
-            }
-            
-            // Default case: just check if it's before today or after maxDate
-            return current < today || current > maxDate;
-          }}
-          value={selectedDates}
-          allowEmpty={[false, false]}
-          format="YYYY-MM-DD"
-          onCalendarChange={(dates) => {
-            if (dates?.[0] && dates?.[1]) {
-              const daysDiff = dates[1].diff(dates[0], 'days');
-              setDateRangeError(daysDiff > 2);
-            } else {
-              setDateRangeError(false);
-            }
-          }}
-          status={dateRangeError ? "error" : ""}
-        />
+        <div style={{ display: 'flex', gap: '8px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+            <Input
+              placeholder="Enter API Key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              type="primary"
+              disabled={!apiKey}
+              onClick={() => handleCalendarSearch(currentRoute)}
+            >
+              Apply
+            </Button>
+          </div>
+        </div>
         {dateRangeError && (
-          <div style={{ color: '#ff4d4f', fontSize: '14px', marginTop: '4px' }}>
-            Date range cannot exceed 3 days
+          <div style={{ color: 'red' }}>
+            Please select a date range in the calendar
           </div>
         )}
       </div>
-      
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 8 }}>API Key:</div>
-        <Input
-          placeholder="Enter API key"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          style={{ width: '100%' }}
-        />
-      </div>
+
+      <FlightAvailabilityCalendar 
+        flightData={availabilityData}
+        currentRoute={currentRoute}
+        onDateRangeSelect={handleCalendarDateSelect}
+        selectedRange={selectedDates}
+        onSearch={handleCalendarSearchClick}
+      />
 
       {isLoadingSegments ? (
-        <div style={{ textAlign: 'center', padding: '20px' }}>
+        <div style={{ textAlign: 'center', margin: '20px 0' }}>
           <Spin />
         </div>
       ) : (
-        <div style={{ 
-          width: '100%',
-          overflowX: 'auto'
-        }}>
-          {currentRoute && currentRoute.slice(0, -1).map((from, index) => {
-            const to = currentRoute[index + 1];
-            const routeKey = `${from}-${to}`;
-            
-            // Filter flights by segmentIndex instead of from/to
-            const flights = segmentDetails.filter(flight => 
-              flight.segmentIndex === index
-            );
-
-            return (
-              <div key={routeKey} style={{ 
-                marginBottom: '24px',
-                width: '100%'
-              }}>
-                <h3 style={{ marginBottom: '16px' }}>{routeKey}</h3>
+        segmentDetails?.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <Typography.Title level={4} style={{ marginBottom: 16 }}>
+              Flights By Segment
+            </Typography.Title>
+            {getSegmentTables().map((segment) => (
+              <div key={segment.index} style={{ marginBottom: 24 }}>
+                <Typography.Title level={5} style={{ marginBottom: 12 }}>
+                  Segment {segment.index} ({segment.route}):
+                </Typography.Title>
                 <Table
-                  dataSource={flights}
                   columns={columns}
+                  dataSource={segment.flights}
+                  pagination={paginationConfig}
                   size="small"
-                  rowKey={(record) => `${record.flightNumber}_${record.DepartsAt}_${record.segmentIndex}`}
-                  sortDirections={['ascend', 'descend']}
-                  style={{ 
-                    width: '100%',
-                    tableLayout: 'fixed'
-                  }}
-                  pagination={{
-                    defaultPageSize: 10,
-                    showSizeChanger: true,
-                    showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} flights`,
-                    pageSizeOptions: ['10', '20', '50', 'all'],
-                    position: ['bottomRight']
-                  }}
-                  locale={{
-                    emptyText: 'No flights available'
-                  }}
                 />
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )
       )}
 
       <style jsx>{`

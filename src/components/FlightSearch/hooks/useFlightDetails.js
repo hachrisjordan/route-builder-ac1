@@ -6,7 +6,7 @@ import { getSegmentColumns } from '../segmentColumns';
 
 export default function useFlightDetails(getColumns, initialCombinations = []) {
   const [selectedDates, setSelectedDates] = useState(null);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('flightSearchApiKey') || '');
   const [segmentDetails, setSegmentDetails] = useState([]);
   const [isLoadingSegments, setIsLoadingSegments] = useState(false);
   const [selectedFlights, setSelectedFlights] = useState({});
@@ -16,7 +16,16 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
   const [originalCombinations] = useState(initialCombinations);
   const [processedFlights, setProcessedFlights] = useState(null);
   const [initialFlights, setInitialFlights] = useState(null);
+  const [availabilityData, setAvailabilityData] = useState({});
+  const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
   const combinationsRef = useRef([]);
+
+  // Update localStorage when apiKey changes
+  useEffect(() => {
+    if (apiKey) {
+      localStorage.setItem('flightSearchApiKey', apiKey);
+    }
+  }, [apiKey]);
 
   const formatTime = (dateStr, baseDate) => {
     const date = dayjs(dateStr);
@@ -166,290 +175,442 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     return Object.values(flights);
   };
 
+  const isDateInRange = (dateStr, dateRange) => {
+    if (!dateRange || !dateRange[0] || !dateRange[1]) return false;
+    const date = dayjs(dateStr);
+    const start = dayjs(dateRange[0]);
+    const end = dayjs(dateRange[1]);
+    return date.isAfter(start.subtract(1, 'day')) && 
+           date.isBefore(end.add(1, 'day'));
+  };
+
   const handleDateSearch = async (currentRoute) => {
     if (!selectedDates || !currentRoute || !apiKey) return;
     
     setIsLoadingSegments(true);
-    const newProcessedSegments = [];
-    const [startDate, endDate] = selectedDates;
-    const baseDate = dayjs(startDate).format('YYYY-MM-DD');
-    
-    console.log('\n=== Processing Segments ===');
-    console.log('Date Range:', {
-      start: dayjs(startDate).format('YYYY-MM-DD'),
-      end: dayjs(endDate).format('YYYY-MM-DD')
-    });
+    setIsLoadingAvailability(true);
     
     try {
-      // Process all segments
-      for (let i = 0; i < currentRoute.length - 1; i++) {
-        const from = currentRoute[i];
-        const to = currentRoute[i + 1];
-        
-        console.log(`\n=== Segment ${i + 1}: ${from}-${to} ===`);
-        
-        let timeWindow = null;
-        const dates = new Set();
+      // Get the selected segments from availability data
+      const selectedSegments = [];
+      for (const date of Object.keys(availabilityData)) {
+        if (isDateInRange(date, selectedDates)) {
+          selectedSegments.push(...availabilityData[date]);
+        }
+      }
 
-        if (i === 0) {
-          // First segment - use full date range
-          const startDay = dayjs(startDate).startOf('day');
-          const endDay = dayjs(endDate).endOf('day');
-          
-          console.log('\n=== First Segment Details ===');
-          console.log('Time Window: 00:00 on first date to 23:59 on last date');
-          console.log(`From: ${startDay.format('YYYY-MM-DD')} 00:00`);
-          console.log(`To: ${endDay.format('YYYY-MM-DD')} 23:59`);
-          
-          // Get all dates in range
-          for (let d = startDay; d.valueOf() <= endDay.valueOf(); d = d.add(1, 'day')) {
-            dates.add(d.format('YYYY-MM-DD'));
+      // Log selected segments before filtering
+      console.log('=== Flights Before Combination Filtering ===');
+      const segmentsByRoute = selectedSegments.reduce((acc, segment) => {
+        if (!acc[segment.route]) {
+          acc[segment.route] = [];
+        }
+        acc[segment.route].push(segment);
+        return acc;
+      }, {});
+
+      Object.entries(segmentsByRoute).forEach(([route, segments]) => {
+        console.log(`\nRoute ${route}:`);
+        segments.forEach(segment => {
+          console.log(`  ID: ${segment.ID}`);
+          console.log(`  Date: ${segment.date}`);
+          console.log(`  Availability: Y:${segment.classes.Y}, J:${segment.classes.J}, F:${segment.classes.F}`);
+        });
+      });
+
+      // Continue with existing logic
+      const segmentPromises = selectedSegments.map(segment => 
+        fetch(`https://backend-284998006367.us-central1.run.app/api/route_details/${segment.ID}`, {
+          headers: {
+            'accept': 'application/json',
+            'Partner-Authorization': apiKey
           }
-        } else {
-          // Handle subsequent segments
-          const prevSegment = newProcessedSegments[i - 1];
+        })
+      );
+
+      // First fetch availability data
+      const routeString = currentRoute.join('-');
+      const availabilityResponse = await fetch(
+        `https://backend-284998006367.us-central1.run.app/api/availability/${routeString}`,
+        {
+          method: 'GET',
+          headers: {
+            'accept': 'application/json',
+            'Partner-Authorization': apiKey
+          }
+        }
+      );
+
+      if (availabilityResponse.ok) {
+        const availabilityResult = await availabilityResponse.json();
+        
+        // Process availability data into a more usable format
+        const processedAvailability = {};
+        availabilityResult.forEach(item => {
+          const dateKey = item.date;
+          if (!processedAvailability[dateKey]) {
+            processedAvailability[dateKey] = [];
+          }
           
-          // If no previous flights found, use full date range for all segments
-          if (!prevSegment || prevSegment.flights.length === 0) {
+          processedAvailability[dateKey].push({
+            route: `${item.originAirport}-${item.destinationAirport}`,
+            classes: {
+              Y: item.YDirect,
+              J: item.JDirect,
+              F: item.FDirect
+            },
+            ID: item.ID,
+            distance: item.distance
+          });
+        });
+        
+        setAvailabilityData(processedAvailability);
+      }
+
+      // Continue with existing segment search logic
+      const newProcessedSegments = [];
+      const [startDate, endDate] = selectedDates;
+      const baseDate = dayjs(startDate).format('YYYY-MM-DD');
+      
+      console.log('\n=== Processing Segments ===');
+      console.log('Date Range:', {
+        start: dayjs(startDate).format('YYYY-MM-DD'),
+        end: dayjs(endDate).format('YYYY-MM-DD')
+      });
+      
+      try {
+        // Process all segments
+        for (let i = 0; i < currentRoute.length - 1; i++) {
+          const from = currentRoute[i];
+          const to = currentRoute[i + 1];
+          
+          console.log(`\n=== Segment ${i + 1}: ${from}-${to} ===`);
+          
+          let timeWindow = null;
+          const dates = new Set();
+
+          if (i === 0) {
+            // First segment - use full date range
             const startDay = dayjs(startDate).startOf('day');
             const endDay = dayjs(endDate).endOf('day');
+            
+            console.log('\n=== First Segment Details ===');
+            console.log('Time Window: 00:00 on first date to 23:59 on last date');
+            console.log(`From: ${startDay.format('YYYY-MM-DD')} 00:00`);
+            console.log(`To: ${endDay.format('YYYY-MM-DD')} 23:59`);
+            
+            // Get all dates in range
             for (let d = startDay; d.valueOf() <= endDay.valueOf(); d = d.add(1, 'day')) {
               dates.add(d.format('YYYY-MM-DD'));
             }
-            console.log('No previous flights found. Using full date range for this segment');
           } else {
-            // Calculate time window from previous segment's flights
-            const arrivals = prevSegment.flights.map(f => dayjs(f.ArrivesAt));
-            arrivals.sort((a, b) => a.valueOf() - b.valueOf());
+            // Handle subsequent segments
+            const prevSegment = newProcessedSegments[i - 1];
             
-            timeWindow = {
-              start: arrivals[0],
-              end: arrivals[arrivals.length - 1].add(24, 'hours')
-            };
-            
-            // Get dates for time window
-            for (let d = dayjs(timeWindow.start); d.valueOf() <= timeWindow.end.valueOf(); d = d.add(1, 'day')) {
-              dates.add(d.format('YYYY-MM-DD'));
-            }
-            
-            console.log('Time Window based on previous segment arrivals:');
-            console.log('  Start:', timeWindow.start.format('YYYY-MM-DD HH:mm'));
-            console.log('  End:', timeWindow.end.format('YYYY-MM-DD HH:mm'));
-          }
-        }
-
-        // Process each date
-        const allFlights = [];
-        for (const date of dates) {
-          const route = routeDetails.find(r => 
-            r.origin === from && 
-            r.destination === to &&
-            r.date === date
-          );
-
-          if (!route) {
-            console.log(`No route found for ${from}-${to} on ${date}`);
-            continue;
-          }
-
-          console.log(`\nFetching ${from}-${to} for ${date}:`);
-          console.log(`Segment ID: ${route.ID}`);
-          
-          try {
-            const response = await fetch(`https://backend-284998006367.us-central1.run.app/api/seats/${route.ID}`, {
-              method: 'GET',
-              headers: {
-                'accept': 'application/json',
-                'Partner-Authorization': apiKey,
-                'Segment-ID': route.ID
+            // If no previous flights found, use full date range for all segments
+            if (!prevSegment || prevSegment.flights.length === 0) {
+              const startDay = dayjs(startDate).startOf('day');
+              const endDay = dayjs(endDate).endOf('day');
+              for (let d = startDay; d.valueOf() <= endDay.valueOf(); d = d.add(1, 'day')) {
+                dates.add(d.format('YYYY-MM-DD'));
               }
-            });
+              console.log('No previous flights found. Using full date range for this segment');
+            } else {
+              // Calculate time window from previous segment's flights
+              const arrivals = prevSegment.flights.map(f => dayjs(f.ArrivesAt));
+              arrivals.sort((a, b) => a.valueOf() - b.valueOf());
+              
+              timeWindow = {
+                start: arrivals[0],
+                end: arrivals[arrivals.length - 1].add(24, 'hours')
+              };
+              
+              // Get dates for time window
+              for (let d = dayjs(timeWindow.start); d.valueOf() <= timeWindow.end.valueOf(); d = d.add(1, 'day')) {
+                dates.add(d.format('YYYY-MM-DD'));
+              }
+              
+              console.log('Time Window based on previous segment arrivals:');
+              console.log('  Start:', timeWindow.start.format('YYYY-MM-DD HH:mm'));
+              console.log('  End:', timeWindow.end.format('YYYY-MM-DD HH:mm'));
+            }
+          }
 
-            if (!response.ok) {
-              console.log(`❌ Failed to fetch ${from}-${to} (ID: ${route.ID})`);
+          // Process each date
+          const allFlights = [];
+          for (const date of dates) {
+            const route = routeDetails.find(r => 
+              r.origin === from && 
+              r.destination === to &&
+              r.date === date
+            );
+
+            if (!route) {
+              console.log(`No route found for ${from}-${to} on ${date}`);
               continue;
             }
 
-            const data = await response.json();
-            const processedFlights = processFlightData(data, timeWindow, i);
-            console.log(`✓ Found ${processedFlights.length} valid flights`);
-            allFlights.push(...processedFlights);
-          } catch (error) {
-            console.error(`Error processing ${from}-${to} for ${date}:`, error);
+            console.log(`\nFetching ${from}-${to} for ${date}:`);
+            console.log(`Segment ID: ${route.ID}`);
+            
+            try {
+              const response = await fetch(`https://backend-284998006367.us-central1.run.app/api/seats/${route.ID}`, {
+                method: 'GET',
+                headers: {
+                  'accept': 'application/json',
+                  'Partner-Authorization': apiKey,
+                  'Segment-ID': route.ID
+                }
+              });
+
+              if (!response.ok) {
+                console.log(`❌ Failed to fetch ${from}-${to} (ID: ${route.ID})`);
+                continue;
+              }
+
+              const data = await response.json();
+              const processedFlights = processFlightData(data, timeWindow, i);
+              console.log(`✓ Found ${processedFlights.length} valid flights`);
+              allFlights.push(...processedFlights);
+            } catch (error) {
+              console.error(`Error processing ${from}-${to} for ${date}:`, error);
+            }
+          }
+
+          console.log(`\nTotal flights found for ${from}-${to}: ${allFlights.length}`);
+
+          // Store searched dates in segment data
+          newProcessedSegments[i] = {
+            route: `${from}-${to}`,
+            flights: allFlights,
+            searchDates: dates, // Add this field
+            earliestArrival: allFlights.length > 0 ? dayjs(allFlights[0].ArrivesAt) : null,
+            latestArrival: allFlights.length > 0 ? dayjs(allFlights[allFlights.length - 1].ArrivesAt) : null
+          };
+
+          // Only break if previous segment had flights but current segment found none
+          if (allFlights.length === 0 && i > 0 && newProcessedSegments[i-1].flights.length > 0) {
+            console.log(`\nNo flights found for segment ${from}-${to} after successful previous segment`);
+            console.log('Skipping remaining segments');
+            break;
           }
         }
 
-        console.log(`\nTotal flights found for ${from}-${to}: ${allFlights.length}`);
+        // After processing all segments
+        if (newProcessedSegments.length >= 1) {
+          console.log('\n=== Flight Combinations ===');
+          
+          // Find the first and last segments with flights
+          const firstSegmentWithFlights = newProcessedSegments.findIndex(
+            segment => segment.flights && segment.flights.length > 0
+          );
+          
+          const lastSegmentWithFlights = [...newProcessedSegments].reverse().findIndex(
+            segment => segment.flights && segment.flights.length > 0
+          );
+          const lastSegmentIndex = newProcessedSegments.length - 1 - lastSegmentWithFlights;
 
-        // Store searched dates in segment data
-        newProcessedSegments[i] = {
-          route: `${from}-${to}`,
-          flights: allFlights,
-          searchDates: dates, // Add this field
-          earliestArrival: allFlights.length > 0 ? dayjs(allFlights[0].ArrivesAt) : null,
-          latestArrival: allFlights.length > 0 ? dayjs(allFlights[allFlights.length - 1].ArrivesAt) : null
-        };
+          console.log(`First segment with flights: ${firstSegmentWithFlights}`);
+          console.log(`Last segment with flights: ${lastSegmentIndex}`);
 
-        // Only break if previous segment had flights but current segment found none
-        if (allFlights.length === 0 && i > 0 && newProcessedSegments[i-1].flights.length > 0) {
-          console.log(`\nNo flights found for segment ${from}-${to} after successful previous segment`);
-          console.log('Skipping remaining segments');
-          break;
-        }
-      }
+          // Find all valid combinations recursively
+          const findValidCombinations = (currentPath = [], segmentIndex = firstSegmentWithFlights) => {
+            // If we've reached beyond the last valid segment, this is a valid combination
+            if (segmentIndex > lastSegmentIndex) {
+              return [currentPath];
+            }
 
-      // After processing all segments
-      if (newProcessedSegments.length >= 1) {
-        console.log('\n=== Flight Combinations ===');
-        
-        // Find the first and last segments with flights
-        const firstSegmentWithFlights = newProcessedSegments.findIndex(
-          segment => segment.flights && segment.flights.length > 0
-        );
-        
-        const lastSegmentWithFlights = [...newProcessedSegments].reverse().findIndex(
-          segment => segment.flights && segment.flights.length > 0
-        );
-        const lastSegmentIndex = newProcessedSegments.length - 1 - lastSegmentWithFlights;
+            const validCombos = [];
+            const currentSegment = newProcessedSegments[segmentIndex];
 
-        console.log(`First segment with flights: ${firstSegmentWithFlights}`);
-        console.log(`Last segment with flights: ${lastSegmentIndex}`);
+            // If no flights in current segment, try next segment
+            if (!currentSegment.flights || currentSegment.flights.length === 0) {
+              return findValidCombinations(currentPath, segmentIndex + 1);
+            }
 
-        // Find all valid combinations recursively
-        const findValidCombinations = (currentPath = [], segmentIndex = firstSegmentWithFlights) => {
-          // If we've reached beyond the last valid segment, this is a valid combination
-          if (segmentIndex > lastSegmentIndex) {
-            return [currentPath];
-          }
-
-          const validCombos = [];
-          const currentSegment = newProcessedSegments[segmentIndex];
-
-          // If no flights in current segment, try next segment
-          if (!currentSegment.flights || currentSegment.flights.length === 0) {
-            return findValidCombinations(currentPath, segmentIndex + 1);
-          }
-
-          // For the first flight in the path, accept any flight
-          if (currentPath.length === 0) {
-            currentSegment.flights.forEach(flight => {
-              const combos = findValidCombinations([flight], segmentIndex + 1);
-              validCombos.push(...combos);
-            });
-          } 
-          // For subsequent segments, check connection times
-          else {
-            const previousFlight = currentPath[currentPath.length - 1];
-            const previousArrival = dayjs(previousFlight.ArrivesAt);
-
-            currentSegment.flights.forEach(flight => {
-              const departure = dayjs(flight.DepartsAt);
-              const connectionTime = departure.diff(previousArrival, 'minutes');
-
-              // Check if departure is within 24 hours of previous arrival
-              if (connectionTime >= 60 && connectionTime <= 24 * 60) {
-                const combos = findValidCombinations([...currentPath, flight], segmentIndex + 1);
+            // For the first flight in the path, accept any flight
+            if (currentPath.length === 0) {
+              currentSegment.flights.forEach(flight => {
+                const combos = findValidCombinations([flight], segmentIndex + 1);
                 validCombos.push(...combos);
+              });
+            } 
+            // For subsequent segments, check connection times
+            else {
+              const previousFlight = currentPath[currentPath.length - 1];
+              const previousArrival = dayjs(previousFlight.ArrivesAt);
+
+              currentSegment.flights.forEach(flight => {
+                const departure = dayjs(flight.DepartsAt);
+                const connectionTime = departure.diff(previousArrival, 'minutes');
+
+                // Check if departure is within 24 hours of previous arrival
+                if (connectionTime >= 60 && connectionTime <= 24 * 60) {
+                  const combos = findValidCombinations([...currentPath, flight], segmentIndex + 1);
+                  validCombos.push(...combos);
+                }
+              });
+            }
+
+            return validCombos;
+          };
+
+          // Get all valid combinations
+          const allCombinations = findValidCombinations();
+
+          // Log the combinations
+          console.log('\n=== Valid Combinations ===');
+          allCombinations.forEach(combo => {
+            const flightInfo = combo.map((flight, idx) => {
+              if (idx === 0) return `${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')})`;
+              
+              const prevFlight = combo[idx - 1];
+              const connectionTime = dayjs(flight.DepartsAt).diff(dayjs(prevFlight.ArrivesAt), 'minutes');
+              const hours = Math.floor(connectionTime / 60);
+              const minutes = connectionTime % 60;
+              return `${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')}) [${hours}:${minutes.toString().padStart(2, '0')}]`;
+            });
+            
+            console.log(flightInfo.join(' → '));
+          });
+
+          // Create a map of valid flights by segment
+          const validFlightsBySegment = new Map();
+          allCombinations.forEach(combo => {
+            combo.forEach(flight => {
+              const segmentKey = flight.segmentIndex;
+              if (!validFlightsBySegment.has(segmentKey)) {
+                validFlightsBySegment.set(segmentKey, new Set());
+              }
+              validFlightsBySegment.get(segmentKey).add(
+                `${flight.flightNumber}_${dayjs(flight.DepartsAt).format('YYYY-MM-DD HH:mm')}`
+              );
+            });
+          });
+
+          // Filter and process flights
+          const filteredFlights = [];
+          for (let i = firstSegmentWithFlights; i <= lastSegmentIndex; i++) {
+            const segment = newProcessedSegments[i];
+            if (!segment || !segment.flights) continue;
+
+            const validFlightsForSegment = validFlightsBySegment.get(i) || new Set();
+            
+            // Add valid flights from this segment
+            segment.flights.forEach(flight => {
+              const flightKey = `${flight.flightNumber}_${dayjs(flight.DepartsAt).format('YYYY-MM-DD HH:mm')}`;
+              if (validFlightsForSegment.has(flightKey)) {
+                filteredFlights.push({
+                  ...flight,
+                  isSelected: false,
+                  segmentIndex: i
+                });
               }
             });
           }
 
-          return validCombos;
-        };
+          setSegmentDetails(filteredFlights);
+          setValidCombinations(allCombinations);
 
-        // Get all valid combinations
-        const allCombinations = findValidCombinations();
-
-        // Log the combinations
-        console.log('\n=== Valid Combinations ===');
-        allCombinations.forEach(combo => {
-          const flightInfo = combo.map((flight, idx) => {
-            if (idx === 0) return `${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')})`;
-            
-            const prevFlight = combo[idx - 1];
-            const connectionTime = dayjs(flight.DepartsAt).diff(dayjs(prevFlight.ArrivesAt), 'minutes');
-            const hours = Math.floor(connectionTime / 60);
-            const minutes = connectionTime % 60;
-            return `${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')}) [${hours}:${minutes.toString().padStart(2, '0')}]`;
-          });
-          
-          console.log(flightInfo.join(' → '));
-        });
-
-        // Create a map of valid flights by segment
-        const validFlightsBySegment = new Map();
-        allCombinations.forEach(combo => {
-          combo.forEach(flight => {
-            const segmentKey = flight.segmentIndex;
-            if (!validFlightsBySegment.has(segmentKey)) {
-              validFlightsBySegment.set(segmentKey, new Set());
+          // Log flights by segment
+          console.log('\n=== Flights By Segment ===');
+          for (let i = firstSegmentWithFlights; i <= lastSegmentIndex; i++) {
+            const segmentFlights = filteredFlights.filter(f => f.segmentIndex === i);
+            if (segmentFlights.length > 0) {
+              console.log(`\nSegment ${i} (${segmentFlights[0].from}-${segmentFlights[0].to}):`);
+              segmentFlights
+                .sort((a, b) => dayjs(a.DepartsAt).valueOf() - dayjs(b.DepartsAt).valueOf())
+                .forEach(flight => {
+                  console.log(`  ${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')})`);
+                });
             }
-            validFlightsBySegment.get(segmentKey).add(
-              `${flight.flightNumber}_${dayjs(flight.DepartsAt).format('YYYY-MM-DD HH:mm')}`
-            );
-          });
-        });
-
-        // Filter and process flights
-        const filteredFlights = [];
-        for (let i = firstSegmentWithFlights; i <= lastSegmentIndex; i++) {
-          const segment = newProcessedSegments[i];
-          if (!segment || !segment.flights) continue;
-
-          const validFlightsForSegment = validFlightsBySegment.get(i) || new Set();
-          
-          // Add valid flights from this segment
-          segment.flights.forEach(flight => {
-            const flightKey = `${flight.flightNumber}_${dayjs(flight.DepartsAt).format('YYYY-MM-DD HH:mm')}`;
-            if (validFlightsForSegment.has(flightKey)) {
-              filteredFlights.push({
-                ...flight,
-                isSelected: false,
-                segmentIndex: i
-              });
-            }
-          });
-        }
-
-        setSegmentDetails(filteredFlights);
-        setValidCombinations(allCombinations);
-
-        // Log flights by segment
-        console.log('\n=== Flights By Segment ===');
-        for (let i = firstSegmentWithFlights; i <= lastSegmentIndex; i++) {
-          const segmentFlights = filteredFlights.filter(f => f.segmentIndex === i);
-          if (segmentFlights.length > 0) {
-            console.log(`\nSegment ${i} (${segmentFlights[0].from}-${segmentFlights[0].to}):`);
-            segmentFlights
-              .sort((a, b) => dayjs(a.DepartsAt).valueOf() - dayjs(b.DepartsAt).valueOf())
-              .forEach(flight => {
-                console.log(`  ${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')})`);
-              });
           }
+          
+          console.log('\n======================');
+        } else {
+          setSegmentDetails(newProcessedSegments.flatMap((segment, index) => 
+            segment.flights.map(flight => ({
+              ...flight,
+              isSelected: false,
+              segmentIndex: index
+            }))
+          ));
+          setValidCombinations([]);
         }
-        
-        console.log('\n======================');
-      } else {
-        setSegmentDetails(newProcessedSegments.flatMap((segment, index) => 
-          segment.flights.map(flight => ({
-            ...flight,
-            isSelected: false,
-            segmentIndex: index
-          }))
-        ));
-        setValidCombinations([]);
+      } catch (error) {
+        console.error('Error fetching segment details:', error);
       }
     } catch (error) {
-      console.error('Error fetching segment details:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setIsLoadingSegments(false);
+      setIsLoadingAvailability(false);
+    }
+  };
+
+  const handleCalendarSearch = async (currentRoute) => {
+    if (!currentRoute || !apiKey) return;
+    
+    setIsLoadingAvailability(true);
+    
+    try {
+      // Fetch availability data
+      const routeString = currentRoute.join('-');
+      const availabilityResponse = await fetch(
+        `https://backend-284998006367.us-central1.run.app/api/availability/${routeString}`,
+        {
+          method: 'GET',
+          headers: {
+            'accept': 'application/json',
+            'Partner-Authorization': apiKey
+          }
+        }
+      );
+
+      if (availabilityResponse.ok) {
+        const availabilityResult = await availabilityResponse.json();
+        
+        // Process availability data into a more usable format
+        const processedAvailability = {};
+        availabilityResult.forEach(item => {
+          const dateKey = item.date;
+          if (!processedAvailability[dateKey]) {
+            processedAvailability[dateKey] = [];
+          }
+          
+          processedAvailability[dateKey].push({
+            route: `${item.originAirport}-${item.destinationAirport}`,
+            classes: {
+              Y: item.YDirect,
+              J: item.JDirect,
+              F: item.FDirect
+            },
+            ID: item.ID,
+            distance: item.distance,
+            date: item.date
+          });
+        });
+        
+        setAvailabilityData(processedAvailability);
+      }
+    } catch (error) {
+      console.error('Error fetching availability data:', error);
+    } finally {
+      setIsLoadingAvailability(false);
     }
   };
 
   const resetDetails = () => {
-    setSelectedDates(null);
-    setApiKey('');
     setSegmentDetails([]);
+    setIsLoadingSegments(false);
+    setSelectedFlights({});
+    setValidCombinations([]);
+    setProcessedSegments([]);
+    setOriginalFlights(null);
+    setProcessedFlights(null);
+    setInitialFlights(null);
+    setAvailabilityData({});
+    setIsLoadingAvailability(false);
   };
 
   const handleFlightSelect = (flight, segmentIndex) => {
@@ -588,12 +749,11 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     segmentDetails,
     isLoadingSegments,
     handleDateSearch,
+    handleCalendarSearch,
     resetDetails,
+    columns,
     selectedFlights,
-    setSelectedFlights,
-    validCombinations,
-    setValidCombinations,
-    handleFlightSelect,
-    columns
+    availabilityData,
+    isLoadingAvailability,
   };
 } 
