@@ -117,7 +117,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
         <div style={{ display: 'flex', gap: '8px', marginBottom: 16 }}>
           <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
             <Input
-              placeholder="Enter your yapping password"
+              placeholder="Enter your yapping password (Under Development)"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               style={{ flex: 1 }}
