@@ -93,7 +93,8 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
               style={{ 
                 width: '24px', 
                 height: '24px',
-                objectFit: 'contain'
+                objectFit: 'contain',
+                borderRadius: '4px'
               }} 
               onError={(e) => {
                 e.target.style.display = 'none';

@@ -199,7 +199,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
         border: '1px solid #f0f0f0',
         backgroundColor: '#f0f0f0',
         gap: '1px',
-        fontFamily: 'Menlo'
+        fontFamily: 'Menlo, monospace'
       }}>
         {/* Day headers */}
         {dayNames.map(day => (
@@ -239,7 +239,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                 backgroundColor: isSelected ? '#e6f4ff' : 'white',
                 minHeight: '120px',
                 padding: '8px',
-                fontFamily: 'Menlo',
+                fontFamily: 'Menlo, monospace',
                 cursor: 'pointer',
                 border: isStart || isEnd ? '2px solid #1890ff' : 'none'
               }}
@@ -266,7 +266,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                     >
                       <div style={{ 
                         fontSize: '14px',
-                        fontFamily: 'Menlo'
+                        fontFamily: 'Menlo, monospace'
                       }}>
                         {segment.route}
                       </div>
@@ -280,7 +280,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                   color: '#999', 
                   fontSize: '12px',
                   marginTop: '32px',
-                  fontFamily: 'Menlo'
+                  fontFamily: 'Menlo, monospace'
                 }}>
                   No flights
                 </div>
