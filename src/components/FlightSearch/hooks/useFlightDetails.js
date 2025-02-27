@@ -116,22 +116,28 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
           : trip.FlightNumbers;
 
         const departureTime = dayjs(trip.DepartsAt.replace('Z', ''));
-        const existingFlight = flights[flightNumber];
-
-        // If this is a duplicate flight, only keep the later one
-        if (existingFlight) {
-          const existingDeparture = dayjs(existingFlight.DepartsAt.replace('Z', '')); // Remove Z to treat as local time
-          if (departureTime.isBefore(existingDeparture)) {
-            return; // Skip this one, keep the existing later flight
-          }
-        }
-
-        const arrivalTime = dayjs(trip.ArrivesAt.replace('Z', '')); // Remove Z to treat as local time
+        const arrivalTime = dayjs(trip.ArrivesAt.replace('Z', '')); 
         const baseDayjs = dayjs(baseDate);
         const departDayDiff = departureTime.diff(baseDayjs, 'day');
         const arrivalDayDiff = arrivalTime.diff(baseDayjs, 'day');
 
-        // Process aircraft name
+        // If flight already exists, merge cabin classes
+        if (flights[flightNumber]) {
+          switch(trip.Cabin.toLowerCase()) {
+            case 'economy':
+              flights[flightNumber].economy = true;
+              break;
+            case 'business':
+              flights[flightNumber].business = true;
+              break;
+            case 'first':
+              flights[flightNumber].first = true;
+              break;
+          }
+          return; // Skip creating new flight entry
+        }
+
+        // Process aircraft name and create new flight entry
         let aircraftName = trip.Aircraft[0];
         if (aircraftName && aircraftName === '787  All') {
           aircraftName = 'Boeing 787-10';
