@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Card, Typography, Badge } from 'antd';
+import { Button, Card, Typography, Badge, Select, InputNumber } from 'antd';
 import dayjs from 'dayjs';
+import { airports } from './data/airports';
 
 const { Title } = Typography;
 
@@ -11,6 +12,8 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
   const [selectionEnd, setSelectionEnd] = useState(null);
   const [error, setError] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedConnection, setSelectedConnection] = useState(null);
+  const [stopoverDays, setStopoverDays] = useState(null);
 
   // Get days in month
   const getDaysInMonth = (year, month) => {
@@ -55,21 +58,34 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
 
   // Function to render availability badges
   const renderAvailabilityBadges = (route, classes) => {
+    // Helper function to get background color based on class code
+    const getBackgroundColor = (classCode, available) => {
+      if (!available) return 'transparent';
+      switch (classCode) {
+        case 'Y': return '#E8E1F2';
+        case 'J': return '#F3CD87';
+        case 'F': return '#D88A3F';
+        default: return 'transparent';
+      }
+    };
+
     return (
       <div style={{ display: 'flex', gap: '2px' }}>
         {Object.entries(classes).map(([classCode, available]) => (
           <div
             key={classCode}
             style={{
-              backgroundColor: available ? '#52c41a' : '#f5222d',
-              color: 'white',
+              backgroundColor: getBackgroundColor(classCode, available),
+              color: available ? '#684634' : '#999',
               padding: '0px 4px',
-              borderRadius: '2px',
+              borderRadius: '4px',
               fontSize: '13px',
-              fontFamily: 'Menlo'
+              fontFamily: 'Menlo',
+              width: '20px',
+              textAlign: 'center'
             }}
           >
-            {classCode}
+            {available ? classCode : '-'}
           </div>
         ))}
       </div>
@@ -170,6 +186,17 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
   const handleApplyClick = () => {
     setShowCalendar(true);
   };
+
+  // Get unique connection points from currentRoute with full airport names
+  const connectionOptions = currentRoute
+    .slice(1, -1)
+    .map(iata => {
+      const airport = airports.find(a => a.IATA === iata);
+      return {
+        label: airport ? `${airport.IATA} - ${airport.Name}` : iata,
+        value: iata
+      };
+    });
 
   // Add useEffect to show calendar when flightData changes
   useEffect(() => {
@@ -323,21 +350,49 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
           <div style={{ 
             marginTop: '16px',
             display: 'flex',
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
+            alignItems: 'center',
             gap: '8px'
           }}>
-            <Button
-              type="primary"
-              onClick={onSearch}
-              disabled={!selectionStart || !selectionEnd}
-            >
-              Search
-            </Button>
-            <Button
-              onClick={() => setShowCalendar(false)}
-            >
-              Hide Calendar
-            </Button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>Stopover at</span>
+              <Select
+                style={{ width: 400 }}
+                value={selectedConnection}
+                onChange={setSelectedConnection}
+                options={connectionOptions}
+                allowClear
+                placeholder="Select city"
+              />
+              {selectedConnection && (
+                <>
+                  <span>for</span>
+                  <InputNumber
+                    style={{ width: 60 }}
+                    min={1}
+                    max={14}
+                    value={stopoverDays}
+                    onChange={setStopoverDays}
+                    placeholder="Days"
+                  />
+                  <span>days</span>
+                </>
+              )}
+            </div>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+              <Button
+                type="primary"
+                onClick={onSearch}
+                disabled={!selectionStart || !selectionEnd}
+              >
+                Search
+              </Button>
+              <Button
+                onClick={() => setShowCalendar(false)}
+              >
+                Hide Calendar
+              </Button>
+            </div>
           </div>
         </div>
       )}
