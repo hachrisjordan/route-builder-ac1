@@ -74,10 +74,14 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     
     rawFlights
       .filter(trip => {
+        // Remove the Z suffix when parsing times since they're actually local times
+        const departureTime = dayjs(trip.DepartsAt.replace('Z', ''));
+        const arrivalTime = dayjs(trip.ArrivesAt.replace('Z', ''));
+        
         console.log(`\nChecking flight ${trip.FlightNumbers}:`);
         console.log(`  Carrier: ${trip.Carriers}`);
-        console.log(`  Departs: ${dayjs(trip.DepartsAt).format('YYYY-MM-DD HH:mm')}`);
-        console.log(`  Arrives: ${dayjs(trip.ArrivesAt).format('YYYY-MM-DD HH:mm')}`);
+        console.log(`  Departs: ${departureTime.format('YYYY-MM-DD HH:mm')}`);
+        console.log(`  Arrives: ${arrivalTime.format('YYYY-MM-DD HH:mm')}`);
         
         // Filter out non-direct flights
         if (trip.Stops !== 0) {
@@ -92,7 +96,6 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         }
         
         if (timeWindow) {
-          const departureTime = dayjs(trip.DepartsAt);
           const isValid = departureTime.isAfter(timeWindow.start) && 
                          departureTime.isBefore(timeWindow.end);
           
@@ -109,14 +112,16 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         return true;
       })
       .forEach(trip => {
+        // Remove the Z suffix when parsing times since they're actually local times
+        const departureTime = dayjs(trip.DepartsAt.replace('Z', ''));
+        const arrivalTime = dayjs(trip.ArrivesAt.replace('Z', '')); 
+
         // Convert CL carrier and flight numbers to LH
         const carrier = trip.Carriers === 'CL' ? 'LH' : trip.Carriers;
         const flightNumber = trip.FlightNumbers.startsWith('CL') 
           ? `LH${trip.FlightNumbers.slice(2)}` 
           : trip.FlightNumbers;
 
-        const departureTime = dayjs(trip.DepartsAt.replace('Z', ''));
-        const arrivalTime = dayjs(trip.ArrivesAt.replace('Z', '')); 
         const baseDayjs = dayjs(baseDate);
         const departDayDiff = departureTime.diff(baseDayjs, 'day');
         const arrivalDayDiff = arrivalTime.diff(baseDayjs, 'day');
@@ -191,7 +196,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
            date.isBefore(end.add(1, 'day'));
   };
 
-  const handleDateSearch = async (currentRoute) => {
+  const handleDateSearch = async (currentRoute, stopoverInfo) => {
     if (!selectedDates || !currentRoute || !apiKey) return;
     
     setIsLoadingSegments(true);
@@ -284,6 +289,14 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
       const [startDate, endDate] = selectedDates;
       const baseDate = dayjs(startDate).format('YYYY-MM-DD');
       
+      console.log('\n=== Processing Segments with Stopover ===');
+      if (stopoverInfo) {
+        console.log('Stopover Details:', {
+          airport: stopoverInfo.airport,
+          days: stopoverInfo.days
+        });
+      }
+
       console.log('\n=== Processing Segments ===');
       console.log('Date Range:', {
         start: dayjs(startDate).format('YYYY-MM-DD'),
@@ -316,11 +329,11 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
               dates.add(d.format('YYYY-MM-DD'));
             }
           } else {
-            // Handle subsequent segments
+            // Handle subsequent segments with stopover consideration
             const prevSegment = newProcessedSegments[i - 1];
             
-            // If no previous flights found, use full date range for all segments
             if (!prevSegment || prevSegment.flights.length === 0) {
+              // Use full date range if no previous flights
               const startDay = dayjs(startDate).startOf('day');
               const endDay = dayjs(endDate).endOf('day');
               for (let d = startDay; d.valueOf() <= endDay.valueOf(); d = d.add(1, 'day')) {
@@ -332,19 +345,31 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
               const arrivals = prevSegment.flights.map(f => dayjs(f.ArrivesAt));
               arrivals.sort((a, b) => a.valueOf() - b.valueOf());
               
-              timeWindow = {
-                start: arrivals[0],
-                end: arrivals[arrivals.length - 1].add(24, 'hours')
-              };
+              // Adjust time window if this is after a stopover
+              if (stopoverInfo && currentRoute[i - 1] === stopoverInfo.airport) {
+                console.log(`\nApplying stopover of ${stopoverInfo.days} days at ${stopoverInfo.airport}`);
+                timeWindow = {
+                  start: arrivals[0].add(stopoverInfo.days, 'days'),
+                  end: arrivals[arrivals.length - 1].add(stopoverInfo.days, 'days').add(24, 'hours')
+                };
+              } else {
+                timeWindow = {
+                  start: arrivals[0],
+                  end: arrivals[arrivals.length - 1].add(24, 'hours')
+                };
+              }
               
               // Get dates for time window
               for (let d = dayjs(timeWindow.start); d.valueOf() <= timeWindow.end.valueOf(); d = d.add(1, 'day')) {
                 dates.add(d.format('YYYY-MM-DD'));
               }
               
-              console.log('Time Window based on previous segment arrivals:');
-              console.log('  Start:', timeWindow.start.format('YYYY-MM-DD HH:mm'));
-              console.log('  End:', timeWindow.end.format('YYYY-MM-DD HH:mm'));
+              console.log('\nTime Window:', {
+                start: timeWindow.start.format('YYYY-MM-DD HH:mm'),
+                end: timeWindow.end.format('YYYY-MM-DD HH:mm'),
+                isStopover: stopoverInfo && currentRoute[i - 1] === stopoverInfo.airport,
+                stopoverDays: stopoverInfo?.days
+              });
             }
           }
 
@@ -455,126 +480,37 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
               return findValidCombinations(currentPath, segmentIndex + 1);
             }
 
-            // For single segment journeys, return all flights as valid combinations
-            if (firstSegmentWithFlights === lastSegmentIndex) {
-              return currentSegment.flights.map(flight => [flight]);
-            }
-
-            // For the last flight in the path, accept any flight
+            // For first segment, try all flights
             if (currentPath.length === 0) {
               currentSegment.flights.forEach(flight => {
-                // Start with the latest segment and work backwards
-                const combos = findValidCombinationsBackward([flight], segmentIndex - 1);
+                const combos = findValidCombinations([flight], segmentIndex + 1);
                 validCombos.push(...combos);
               });
-            } 
-            // For previous segments, check connection times
-            else {
-              const nextFlight = currentPath[0];
-              const departure = dayjs(nextFlight.DepartsAt);
+            } else {
+              // For subsequent segments, check connection times
+              const prevFlight = currentPath[currentPath.length - 1];
+              const prevArrival = dayjs(prevFlight.ArrivesAt);
 
               currentSegment.flights.forEach(flight => {
-                const arrival = dayjs(flight.ArrivesAt);
-                const connectionTime = departure.diff(arrival, 'minutes');
+                const departure = dayjs(flight.DepartsAt);
+                const connectionTime = departure.diff(prevArrival, 'minutes');
 
-                // Check if departure is within 24 hours of arrival
+                // Check if departure is within 24 hours of arrival and at least 1 hour connection
                 if (connectionTime >= 60 && connectionTime <= 24 * 60) {
-                  const combos = findValidCombinationsBackward([flight, ...currentPath], segmentIndex - 1);
+                  const combos = findValidCombinations([...currentPath, flight], segmentIndex + 1);
                   validCombos.push(...combos);
                 }
               });
             }
 
             return validCombos;
-          };
-
-          const findValidCombinationsBackward = (currentPath = [], segmentIndex) => {
-            // If we've reached before the first segment, this is a valid combination
-            if (segmentIndex < firstSegmentWithFlights) {
-              return [currentPath];
-            }
-
-            const validCombos = [];
-            const currentSegment = newProcessedSegments[segmentIndex];
-
-            // If no flights in current segment, try previous segment
-            if (!currentSegment || currentSegment.flights.length === 0) {
-              return findValidCombinationsBackward(currentPath, segmentIndex - 1);
-            }
-
-            // For the first flight in the path, accept any flight
-            if (currentPath.length === 0) {
-              currentSegment.flights.forEach(flight => {
-                const combos = findValidCombinationsBackward([flight], segmentIndex - 1);
-                validCombos.push(...combos);
-              });
-            } 
-            // For subsequent segments, check connection times
-            else {
-              const previousFlight = currentPath[0];
-              const previousDeparture = dayjs(previousFlight.DepartsAt);
-
-              currentSegment.flights.forEach(flight => {
-                const arrival = dayjs(flight.ArrivesAt);
-                const connectionTime = previousDeparture.diff(arrival, 'minutes');
-
-                // Check if next departure is within 24 hours of arrival
-                if (connectionTime >= 60 && connectionTime <= 24 * 60) {
-                  const combos = findValidCombinationsBackward([flight, ...currentPath], segmentIndex - 1);
-                  validCombos.push(...combos);
-                }
-              });
-            }
-
-            return validCombos;
-          };
-
-          const trySegmentRanges = () => {
-            let allCombinations = [];
-            const totalSegments = lastSegmentIndex - firstSegmentWithFlights + 1;
-            
-            // For single segment journeys
-            if (totalSegments === 1) {
-              const segment = newProcessedSegments[firstSegmentWithFlights];
-              if (segment?.flights?.length > 0) {
-                allCombinations = segment.flights.map(flight => [flight]);
-                console.log(`Found ${allCombinations.length} combinations for single segment journey`);
-                return allCombinations;
-              }
-            }
-            
-            // Try from longest to shortest segment combinations
-            for (let segmentCount = totalSegments; segmentCount >= 2; segmentCount--) {
-              console.log(`\nTrying ${segmentCount}-segment combinations...`);
-              
-              // Try all possible ranges of length segmentCount
-              for (let startSegment = firstSegmentWithFlights; startSegment <= lastSegmentIndex - segmentCount + 1; startSegment++) {
-                const endSegment = startSegment + segmentCount - 1;
-                console.log(`Checking segments ${startSegment}-${endSegment}...`);
-                
-                // Use backward search if starting from first segment, forward search otherwise
-                const combinations = startSegment === 0 
-                  ? findValidCombinationsBackward([], endSegment)
-                  : findValidCombinations([], startSegment, endSegment);
-                  
-                if (combinations.length > 0) {
-                  console.log(`Found ${combinations.length} combinations for segments ${startSegment}-${endSegment}`);
-                  allCombinations.push(...combinations);
-                }
-              }
-              
-              // If we found any combinations, stop looking for shorter ones
-              if (allCombinations.length > 0) {
-                console.log(`\nFound valid combinations with ${segmentCount} segments`);
-                break;
-              }
-            }
-            
-            return allCombinations;
           };
 
           // Get all valid combinations using the new function
-          const allCombinations = trySegmentRanges();
+          const allCombinations = findValidCombinations();
+
+          // Store combinations in ref immediately after finding them
+          combinationsRef.current = allCombinations;
 
           // Log the combinations
           console.log('\n=== Valid Combinations ===');
@@ -584,7 +520,9 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
             console.log(`Found ${allCombinations.length} valid combinations`);
             allCombinations.forEach(combo => {
               const flightInfo = combo.map((flight, idx) => {
-                if (idx === 0) return `${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')})`;
+                if (idx === 0) {
+                  return `${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')})`;
+                }
                 
                 const prevFlight = combo[idx - 1];
                 const connectionTime = dayjs(flight.DepartsAt).diff(dayjs(prevFlight.ArrivesAt), 'minutes');
@@ -661,7 +599,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
           setValidCombinations([]);
         }
       } catch (error) {
-        console.error('Error fetching segment details:', error);
+        console.error('Error processing segments:', error);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -788,45 +726,76 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         }
       });
 
-      // Find valid combinations that include ANY of the selected flights per segment
-      const validCombos = validCombinations.filter(combo => {
-        return Object.entries(newSelected).every(([selectedSegmentIndex, selectedFlights]) => {
-          const comboFlight = combo[selectedSegmentIndex];
-          return selectedFlights.some(selectedFlight => 
-            comboFlight && 
-            comboFlight.flightNumber === selectedFlight.flightNumber && 
-            dayjs(comboFlight.DepartsAt).isSame(dayjs(selectedFlight.DepartsAt))
-          );
+      // Use combinations from the ref
+      const currentCombos = combinationsRef.current;
+      const firstSegmentWithFlights = Math.min(...segmentDetails
+        .filter(f => !f.hidden)
+        .map(f => f.segmentIndex));
+      
+      console.log('\nChecking combinations:', currentCombos.map(combo => 
+        combo.map(f => `${f.flightNumber} (${dayjs(f.DepartsAt).format('MM-DD HH:mm')})`).join(' → ')
+      ));
+
+      // Find combinations that contain the selected flight(s)
+      const validCombos = currentCombos.filter(combo => {
+        // If no selections, all combinations are valid
+        if (Object.keys(newSelected).length === 0) return true;
+
+        // Check if this combination contains all selected flights
+        const isValid = Object.entries(newSelected).every(([segIdx, flights]) => {
+          const selectedFlight = flights[0];
+          // Adjust index based on first segment with flights
+          const comboIndex = parseInt(segIdx, 10) - firstSegmentWithFlights;
+          const comboFlight = combo[comboIndex];
+          
+          const matches = comboFlight?.flightNumber === selectedFlight.flightNumber &&
+                         dayjs(comboFlight.DepartsAt).format('MM-DD HH:mm') === 
+                         dayjs(selectedFlight.DepartsAt).format('MM-DD HH:mm');
+          
+          console.log(`Checking combo flight in segment ${segIdx}:`, {
+            selected: `${selectedFlight.flightNumber} (${dayjs(selectedFlight.DepartsAt).format('MM-DD HH:mm')})`,
+            combo: comboFlight ? `${comboFlight.flightNumber} (${dayjs(comboFlight.DepartsAt).format('MM-DD HH:mm')})` : 'none',
+            comboIndex,
+            matches
+          });
+          
+          return matches;
+        });
+
+        return isValid;
+      });
+
+      console.log('\nValid combinations:', validCombos.map(combo => 
+        combo.map(f => `${f.flightNumber} (${dayjs(f.DepartsAt).format('MM-DD HH:mm')})`).join(' → ')
+      ));
+
+      // Create a set of all flights that appear in valid combinations
+      const validFlights = new Set();
+      validCombos.forEach(combo => {
+        combo.forEach(f => {
+          if (!f) return;
+          const key = `${f.flightNumber}_${dayjs(f.DepartsAt).format('YYYY-MM-DD HH:mm')}`;
+          validFlights.add(key);
         });
       });
 
-      console.log(`\nFound ${validCombos.length} valid combinations with selected flights`);
-
-      // Filter and process flights
-      const filteredFlights = validCombos.flatMap(combo => 
-        combo.map((f, idx) => ({
-          ...f,
-          isSelected: newSelected[idx]?.some(sf => 
+      // Update visibility
+      setSegmentDetails(prevDetails => 
+        prevDetails.map(f => {
+          const flightKey = `${f.flightNumber}_${dayjs(f.DepartsAt).format('YYYY-MM-DD HH:mm')}`;
+          const isSelected = newSelected[f.segmentIndex]?.some(sf => 
             sf.flightNumber === f.flightNumber && 
-            dayjs(sf.DepartsAt).isSame(dayjs(f.DepartsAt))
-          ) || false,
-          segmentIndex: idx
-        }))
+            dayjs(sf.DepartsAt).format('MM-DD HH:mm') === dayjs(f.DepartsAt).format('MM-DD HH:mm')
+          ) || false;
+
+          return {
+            ...f,
+            isSelected,
+            hidden: Object.keys(newSelected).length > 0 && !isSelected && !validFlights.has(flightKey)
+          };
+        })
       );
 
-      // Remove duplicates while preserving selections
-      const seenFlights = new Map();
-      const uniqueFlights = filteredFlights.filter(f => {
-        const key = `${f.flightNumber}_${dayjs(f.DepartsAt).format('YYYY-MM-DD HH:mm')}_${f.segmentIndex}`;
-        if (!seenFlights.has(key)) {
-          seenFlights.set(key, f.isSelected);
-          return true;
-        }
-        f.isSelected = f.isSelected || seenFlights.get(key);
-        return false;
-      });
-
-      setSegmentDetails(uniqueFlights);
       return newSelected;
     });
   };
@@ -836,12 +805,6 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     const [startDate] = selectedDates;
     return getColumns(handleFlightSelect, dayjs(startDate).startOf('day'));
   }, [handleFlightSelect, selectedDates, getColumns]);
-
-  // Initialize with all flights from all combinations
-  useEffect(() => {
-    console.log('Updating combinations ref:', initialCombinations);
-    combinationsRef.current = initialCombinations;
-  }, [initialCombinations]);
 
   // Initialize segment details
   useEffect(() => {

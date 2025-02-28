@@ -205,6 +205,33 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     }
   }, [flightData]);
 
+  // Modify the onSearch handler to include stopover info and logging
+  const handleSearch = () => {
+    // Only include stopover info if both connection and days are selected
+    const stopoverInfo = selectedConnection && stopoverDays ? {
+      airport: selectedConnection,
+      days: stopoverDays
+    } : null;
+
+    // Enhanced logging
+    console.log('\n=== Stopover Information Debug ===');
+    console.log('Selected Connection:', selectedConnection);
+    console.log('Stopover Days:', stopoverDays);
+    console.log('Stopover Info Object:', stopoverInfo);
+    console.log('Current Route:', currentRoute);
+    console.log('Selected Range:', selectionStart, selectionEnd);
+    console.log('========================');
+
+    // Call onSearch with all necessary information
+    onSearch({
+      dateRange: {
+        start: selectionStart,
+        end: selectionEnd
+      },
+      stopover: stopoverInfo  // Make sure this is being passed
+    });
+  };
+
   return (
     <div>
       {!showCalendar && (
@@ -359,7 +386,12 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
               <Select
                 style={{ width: 400 }}
                 value={selectedConnection}
-                onChange={setSelectedConnection}
+                onChange={(value) => {
+                  setSelectedConnection(value);
+                  if (!value) {
+                    setStopoverDays(null); // Reset days when connection is cleared
+                  }
+                }}
                 options={connectionOptions}
                 allowClear
                 placeholder="Select city"
@@ -382,8 +414,8 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
               <Button
                 type="primary"
-                onClick={onSearch}
-                disabled={!selectionStart || !selectionEnd}
+                onClick={handleSearch}
+                disabled={!selectionStart || !selectionEnd || (selectedConnection && !stopoverDays)}
               >
                 Search
               </Button>

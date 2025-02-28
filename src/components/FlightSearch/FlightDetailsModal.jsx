@@ -60,33 +60,24 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
 
   // Function to group flights by segment with safety checks
   const getSegmentTables = () => {
-    if (!segmentDetails?.length || !currentRoute?.length) return [];
+    if (!segmentDetails || segmentDetails.length === 0) return [];
 
-    // Group flights by segment index
-    const segmentGroups = segmentDetails.reduce((acc, flight) => {
-      const segmentIndex = flight.segmentIndex;
-      if (!acc[segmentIndex]) {
-        acc[segmentIndex] = [];
+    // Group flights by segment and filter out hidden flights
+    const segments = segmentDetails.reduce((acc, flight) => {
+      if (flight.hidden) return acc; // Skip hidden flights
+      
+      if (!acc[flight.segmentIndex]) {
+        acc[flight.segmentIndex] = {
+          index: flight.segmentIndex,
+          route: `${flight.from}-${flight.to}`,
+          flights: []
+        };
       }
-      acc[segmentIndex].push(flight);
+      acc[flight.segmentIndex].flights.push(flight);
       return acc;
     }, {});
 
-    // Convert to array format with segment info
-    return Object.entries(segmentGroups).map(([index, flights]) => {
-      const currentIndex = parseInt(index);
-      const nextIndex = currentIndex + 1;
-      
-      // Safety check for route indices
-      if (nextIndex >= currentRoute.length) return null;
-      
-      const segmentRoute = `${currentRoute[currentIndex]}-${currentRoute[nextIndex]}`;
-      return {
-        index: currentIndex,
-        route: segmentRoute,
-        flights
-      };
-    }).filter(Boolean); // Remove any null entries
+    return Object.values(segments);
   };
 
   // Add pagination settings
@@ -454,7 +445,8 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                   totalDistance <= p["Max Distance"]
                 );
 
-                if (!pricing || !pricing.First) return '-';
+                // Return '-' if there are no First Class segments or no pricing data
+                if (!pricing || !pricing.First || firstPercentage === 0) return '-';
 
                 let percentageText = '';
                 if (businessPercentage > 0 && firstPercentage > 0) {
