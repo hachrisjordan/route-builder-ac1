@@ -162,6 +162,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
           business: false,
           first: false,
           isSelected: false,
+          distance: parseInt(trip.Distance) || getSegmentDistance(trip.OriginAirport, trip.DestinationAirport),
           segmentIndex: segmentIndex
         };
         
@@ -195,13 +196,18 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     
     setIsLoadingSegments(true);
     setIsLoadingAvailability(true);
+    setSelectedFlights({});
     
     try {
-      // Get the selected segments from availability data
       const selectedSegments = [];
       for (const date of Object.keys(availabilityData)) {
         if (isDateInRange(date, selectedDates)) {
-          selectedSegments.push(...availabilityData[date]);
+          // Preserve distance information when collecting segments
+          const segments = availabilityData[date].map(segment => ({
+            ...segment,
+            distance: parseInt(segment.distance) || getSegmentDistance(segment.route.split('-')[0], segment.route.split('-')[1])
+          }));
+          selectedSegments.push(...segments);
         }
       }
 
@@ -445,8 +451,13 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
             const currentSegment = newProcessedSegments[segmentIndex];
 
             // If no flights in current segment, try next segment
-            if (!currentSegment.flights || currentSegment.flights.length === 0) {
+            if (!currentSegment?.flights || currentSegment.flights.length === 0) {
               return findValidCombinations(currentPath, segmentIndex + 1);
+            }
+
+            // For single segment journeys, return all flights as valid combinations
+            if (firstSegmentWithFlights === lastSegmentIndex) {
+              return currentSegment.flights.map(flight => [flight]);
             }
 
             // For the last flight in the path, accept any flight
@@ -487,7 +498,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
             const currentSegment = newProcessedSegments[segmentIndex];
 
             // If no flights in current segment, try previous segment
-            if (!currentSegment.flights || currentSegment.flights.length === 0) {
+            if (!currentSegment || currentSegment.flights.length === 0) {
               return findValidCombinationsBackward(currentPath, segmentIndex - 1);
             }
 
@@ -521,6 +532,16 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
           const trySegmentRanges = () => {
             let allCombinations = [];
             const totalSegments = lastSegmentIndex - firstSegmentWithFlights + 1;
+            
+            // For single segment journeys
+            if (totalSegments === 1) {
+              const segment = newProcessedSegments[firstSegmentWithFlights];
+              if (segment?.flights?.length > 0) {
+                allCombinations = segment.flights.map(flight => [flight]);
+                console.log(`Found ${allCombinations.length} combinations for single segment journey`);
+                return allCombinations;
+              }
+            }
             
             // Try from longest to shortest segment combinations
             for (let segmentCount = totalSegments; segmentCount >= 2; segmentCount--) {
@@ -654,6 +675,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     if (!currentRoute || !apiKey) return;
     
     setIsLoadingAvailability(true);
+    setSelectedFlights({});
     
     try {
       // Fetch availability data

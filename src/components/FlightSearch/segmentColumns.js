@@ -147,7 +147,7 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
       width: 40,
       align: 'center',
       sorter: (a, b) => (a.economy === b.economy ? 0 : a.economy ? -1 : 1),
-      render: hasClass => hasClass ? <CheckOutlined style={{ color: '#52c41a' }} /> : null
+      render: hasClass => hasClass ? <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#52c41a', margin: 'auto' }} /> : null
     },
     { 
       title: 'Business', 
@@ -155,7 +155,7 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
       width: 40,
       align: 'center',
       sorter: (a, b) => (a.business === b.business ? 0 : a.business ? -1 : 1),
-      render: hasClass => hasClass ? <CheckOutlined style={{ color: '#52c41a' }} /> : null
+      render: hasClass => hasClass ? <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#52c41a', margin: 'auto' }} /> : null
     },
     { 
       title: 'First', 
@@ -163,7 +163,7 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
       width: 40,
       align: 'center',
       sorter: (a, b) => (a.first === b.first ? 0 : a.first ? -1 : 1),
-      render: hasClass => hasClass ? <CheckOutlined style={{ color: '#52c41a' }} /> : null
+      render: hasClass => hasClass ? <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#52c41a', margin: 'auto' }} /> : null
     }
   ];
 }; 
