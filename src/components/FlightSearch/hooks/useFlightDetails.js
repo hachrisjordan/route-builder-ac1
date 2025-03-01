@@ -197,7 +197,18 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
   };
 
   const handleDateSearch = async (currentRoute, stopoverInfo) => {
-    if (!selectedDates || !currentRoute || !apiKey) return;
+    console.log('\n=== useFlightDetails handleDateSearch ===');
+    console.log('Current Route:', currentRoute);
+    console.log('Received Stopover Info:', JSON.stringify(stopoverInfo, null, 2));
+    
+    if (!selectedDates || !currentRoute || !apiKey) {
+      console.log('Missing required data:', {
+        selectedDates: !!selectedDates,
+        currentRoute: !!currentRoute,
+        apiKey: !!apiKey
+      });
+      return;
+    }
     
     setIsLoadingSegments(true);
     setIsLoadingAvailability(true);
@@ -345,31 +356,42 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
               const arrivals = prevSegment.flights.map(f => dayjs(f.ArrivesAt));
               arrivals.sort((a, b) => a.valueOf() - b.valueOf());
               
-              // Adjust time window if this is after a stopover
-              if (stopoverInfo && currentRoute[i - 1] === stopoverInfo.airport) {
+              console.log('\n=== Processing Subsequent Segment ===');
+              console.log('Segment:', `${currentRoute[i-1]}-${currentRoute[i]}`);
+              console.log('Stopover Info:', JSON.stringify(stopoverInfo, null, 2));
+              console.log('Current Airport:', currentRoute[i]);
+              console.log('Previous Airport:', currentRoute[i-1]);
+              console.log('Is Stopover Airport:', stopoverInfo && currentRoute[i] === stopoverInfo.airport);
+              
+              // Adjust time window based on stopover
+              if (stopoverInfo && currentRoute[i] === stopoverInfo.airport) {
                 console.log(`\nApplying stopover of ${stopoverInfo.days} days at ${stopoverInfo.airport}`);
                 timeWindow = {
                   start: arrivals[0].add(stopoverInfo.days, 'days'),
-                  end: arrivals[arrivals.length - 1].add(stopoverInfo.days, 'days').add(24, 'hours')
+                  end: arrivals[arrivals.length - 1].add(stopoverInfo.days, 'days').add(24, 'hours'),
+                  isStopover: true,
+                  stopoverDays: stopoverInfo.days
                 };
               } else {
                 timeWindow = {
                   start: arrivals[0],
-                  end: arrivals[arrivals.length - 1].add(24, 'hours')
+                  end: arrivals[arrivals.length - 1].add(24, 'hours'),
+                  isStopover: false,
+                  stopoverDays: 0
                 };
-              }
-              
-              // Get dates for time window
-              for (let d = dayjs(timeWindow.start); d.valueOf() <= timeWindow.end.valueOf(); d = d.add(1, 'day')) {
-                dates.add(d.format('YYYY-MM-DD'));
               }
               
               console.log('\nTime Window:', {
                 start: timeWindow.start.format('YYYY-MM-DD HH:mm'),
                 end: timeWindow.end.format('YYYY-MM-DD HH:mm'),
-                isStopover: stopoverInfo && currentRoute[i - 1] === stopoverInfo.airport,
-                stopoverDays: stopoverInfo?.days
+                isStopover: timeWindow.isStopover,
+                stopoverDays: timeWindow.stopoverDays
               });
+
+              // Get dates for time window
+              for (let d = dayjs(timeWindow.start); d.valueOf() <= timeWindow.end.valueOf(); d = d.add(1, 'day')) {
+                dates.add(d.format('YYYY-MM-DD'));
+              }
             }
           }
 
@@ -490,15 +512,28 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
               // For subsequent segments, check connection times
               const prevFlight = currentPath[currentPath.length - 1];
               const prevArrival = dayjs(prevFlight.ArrivesAt);
+              const isStopoverPoint = stopoverInfo && 
+                                     currentRoute[segmentIndex] === stopoverInfo.airport;
 
               currentSegment.flights.forEach(flight => {
                 const departure = dayjs(flight.DepartsAt);
                 const connectionTime = departure.diff(prevArrival, 'minutes');
 
-                // Check if departure is within 24 hours of arrival and at least 1 hour connection
-                if (connectionTime >= 60 && connectionTime <= 24 * 60) {
-                  const combos = findValidCombinations([...currentPath, flight], segmentIndex + 1);
-                  validCombos.push(...combos);
+                if (isStopoverPoint) {
+                  // For stopover points, connection must be within stopover day window
+                  const minStopoverTime = stopoverInfo.days * 24 * 60; // Convert days to minutes
+                  const maxStopoverTime = (stopoverInfo.days + 1) * 24 * 60; // Add one more day for flexibility
+                  
+                  if (connectionTime >= minStopoverTime && connectionTime <= maxStopoverTime) {
+                    const combos = findValidCombinations([...currentPath, flight], segmentIndex + 1);
+                    validCombos.push(...combos);
+                  }
+                } else {
+                  // For normal connections, 30 minutes to 24 hours
+                  if (connectionTime >= 30 && connectionTime <= 24 * 60) {
+                    const combos = findValidCombinations([...currentPath, flight], segmentIndex + 1);
+                    validCombos.push(...combos);
+                  }
                 }
               });
             }

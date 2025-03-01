@@ -205,31 +205,30 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     }
   }, [flightData]);
 
-  // Modify the onSearch handler to include stopover info and logging
+  // Modify the handleSearch handler to include stopover info and logging
   const handleSearch = () => {
     // Only include stopover info if both connection and days are selected
     const stopoverInfo = selectedConnection && stopoverDays ? {
       airport: selectedConnection,
-      days: stopoverDays
+      days: parseInt(stopoverDays)  // Ensure days is a number
     } : null;
 
     // Enhanced logging
-    console.log('\n=== Stopover Information Debug ===');
+    console.log('\n=== FlightAvailabilityCalendar Search Parameters ===');
+    console.log('Start Date:', selectionStart);
+    console.log('End Date:', selectionEnd);
+    console.log('Stopover Info:', JSON.stringify(stopoverInfo, null, 2));
     console.log('Selected Connection:', selectedConnection);
     console.log('Stopover Days:', stopoverDays);
-    console.log('Stopover Info Object:', stopoverInfo);
     console.log('Current Route:', currentRoute);
-    console.log('Selected Range:', selectionStart, selectionEnd);
-    console.log('========================');
 
     // Call onSearch with all necessary information
-    onSearch({
-      dateRange: {
-        start: selectionStart,
-        end: selectionEnd
-      },
-      stopover: stopoverInfo  // Make sure this is being passed
-    });
+    if (selectionStart && selectionEnd) {
+      console.log('Calling onSearch with stopover:', JSON.stringify(stopoverInfo, null, 2));
+      onSearch(selectionStart, selectionEnd, stopoverInfo);
+    } else {
+      console.error('Missing date selection');
+    }
   };
 
   return (
@@ -404,7 +403,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                     min={1}
                     max={14}
                     value={stopoverDays}
-                    onChange={setStopoverDays}
+                    onChange={(value) => setStopoverDays(value)}  // Ensure value is passed directly
                     placeholder="Days"
                   />
                   <span>days</span>

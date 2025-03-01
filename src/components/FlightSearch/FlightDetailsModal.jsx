@@ -50,12 +50,13 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
     setDateRangeError(false);
   };
 
-  const handleCalendarSearchClick = () => {
+  const handleCalendarSearchClick = (startDate, endDate, stopoverInfo) => {
     if (!selectedDates) {
       setDateRangeError(true);
       return;
     }
-    handleDateSearch(currentRoute);
+    console.log('Modal passing stopover info:', JSON.stringify(stopoverInfo, null, 2));
+    handleDateSearch(currentRoute, stopoverInfo);
   };
 
   // Function to group flights by segment with safety checks
@@ -197,7 +198,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                         const nextSegmentFlights = selectedFlights[segment.index + 1];
                         
                         if (!currentSegmentFlights?.[0] || !nextSegmentFlights?.[0]) {
-                          return 'Select flights to see layover duration';
+                          return 'Select flights to see connection time';
                         }
 
                         const currentFlight = currentSegmentFlights[0];
@@ -207,10 +208,19 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                         const departureTime = dayjs(nextFlight.DepartsAt);
                         const layoverMinutes = departureTime.diff(arrivalTime, 'minute');
                         
-                        const hours = Math.floor(layoverMinutes / 60);
-                        const minutes = layoverMinutes % 60;
-                        
-                        return `Layover duration: ${hours}h ${minutes}m`;
+                        // If layover is more than 24 hours, show as stopover
+                        if (layoverMinutes >= 24 * 60) {
+                          const days = Math.floor(layoverMinutes / (24 * 60));
+                          const remainingHours = Math.floor((layoverMinutes % (24 * 60)) / 60);
+                          const remainingMinutes = layoverMinutes % 60;
+                          
+                          return `Stopover duration: ${days} day${days > 1 ? 's' : ''} ${remainingHours}h ${remainingMinutes}m`;
+                        } else {
+                          // Regular layover display
+                          const hours = Math.floor(layoverMinutes / 60);
+                          const minutes = layoverMinutes % 60;
+                          return `Layover duration: ${hours}h ${minutes}m`;
+                        }
                       })()}
                     </Typography.Text>
                   </div>
