@@ -197,10 +197,12 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
            date.isBefore(end.add(1, 'day'));
   };
 
-  const handleDateSearch = async (currentRoute, stopoverInfo) => {
+  const handleDateSearch = async (currentRoute, stopoverInfo, preserveCalendarData = false, clearSelections = false) => {
     console.log('\n=== useFlightDetails handleDateSearch ===');
     console.log('Current Route:', currentRoute);
     console.log('Received Stopover Info:', JSON.stringify(stopoverInfo, null, 2));
+    console.log('Preserve Calendar Data:', preserveCalendarData);
+    console.log('Clear Selections:', clearSelections);
     
     if (!selectedDates || !currentRoute || !apiKey) {
       console.log('Missing required data:', {
@@ -211,9 +213,19 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
       return;
     }
     
+    // Always clear flight selections when requested
+    if (clearSelections) {
+      setSelectedFlights({});
+      setSegmentDetails(prevDetails => 
+        prevDetails.map(f => ({
+          ...f,
+          isSelected: false,
+          hidden: false
+        }))
+      );
+    }
+    
     setIsLoadingSegments(true);
-    setIsLoadingAvailability(true);
-    setSelectedFlights({});
     
     try {
       const selectedSegments = [];
@@ -247,7 +259,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         });
       });
 
-      // Continue with existing logic
+      // Continue with existing segment search logic
       const segmentPromises = selectedSegments.map(segment => 
         fetch(`https://backend-284998006367.us-central1.run.app/api/route_details/${segment.ID}`, {
           headers: {
@@ -257,43 +269,54 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         })
       );
 
-      // First fetch availability data
-      const routeString = currentRoute.join('-');
-      const availabilityResponse = await fetch(
-        `https://backend-284998006367.us-central1.run.app/api/availability/${routeString}`,
-        {
-          method: 'GET',
-          headers: {
-            'accept': 'application/json',
-            'Partner-Authorization': apiKey
-          }
+      // Only fetch availability data if we're not preserving it
+      if (!preserveCalendarData) {
+        const routeString = currentRoute.join('-');
+        
+        // Add startDate parameter if available
+        let url = `https://backend-284998006367.us-central1.run.app/api/availability/${routeString}`;
+        if (startDate) {
+          const formattedDate = dayjs(startDate).format('YYYY-MM-DD');
+          url += `?startDate=${formattedDate}`;
         }
-      );
-
-      if (availabilityResponse.ok) {
-        const availabilityResult = await availabilityResponse.json();
         
-        // Process availability data into a more usable format
-        const processedAvailability = {};
-        availabilityResult.forEach(item => {
-          const dateKey = item.date;
-          if (!processedAvailability[dateKey]) {
-            processedAvailability[dateKey] = [];
+        const availabilityResponse = await fetch(
+          url,
+          {
+            method: 'GET',
+            headers: {
+              'accept': 'application/json',
+              'Partner-Authorization': apiKey
+            }
           }
+        );
+
+        if (availabilityResponse.ok) {
+          const availabilityResult = await availabilityResponse.json();
           
-          processedAvailability[dateKey].push({
-            route: `${item.originAirport}-${item.destinationAirport}`,
-            classes: {
-              Y: item.YDirect,
-              J: item.JDirect,
-              F: item.FDirect
-            },
-            ID: item.ID,
-            distance: item.distance
+          // Process availability data into a more usable format
+          const processedAvailability = {};
+          availabilityResult.forEach(item => {
+            const dateKey = item.date;
+            if (!processedAvailability[dateKey]) {
+              processedAvailability[dateKey] = [];
+            }
+            
+            processedAvailability[dateKey].push({
+              route: `${item.originAirport}-${item.destinationAirport}`,
+              classes: {
+                Y: item.YDirect,
+                J: item.JDirect,
+                F: item.FDirect
+              },
+              ID: item.ID,
+              distance: item.distance,
+              date: item.date
+            });
           });
-        });
-        
-        setAvailabilityData(processedAvailability);
+          
+          setAvailabilityData(processedAvailability);
+        }
       }
 
       // Continue with existing segment search logic
@@ -641,7 +664,6 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
       console.error('Error fetching data:', error);
     } finally {
       setIsLoadingSegments(false);
-      setIsLoadingAvailability(false);
     }
   };
 
@@ -649,7 +671,6 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     if (!currentRoute || !apiKey) return;
     
     setIsLoadingAvailability(true);
-    setSelectedFlights({});
     
     try {
       // Fetch availability data
@@ -660,7 +681,10 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
       if (startDate) {
         const formattedDate = dayjs(startDate).format('YYYY-MM-DD');
         url += `?startDate=${formattedDate}`;
+        console.log(`Using start date: ${formattedDate} for availability search`);
       }
+      
+      console.log(`Fetching availability data from: ${url}`);
       
       const availabilityResponse = await fetch(
         url,
@@ -675,6 +699,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
 
       if (availabilityResponse.ok) {
         const availabilityResult = await availabilityResponse.json();
+        console.log(`Received ${availabilityResult.length} availability records`);
         
         // Process availability data into a more usable format
         const processedAvailability = {};
@@ -698,6 +723,8 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         });
         
         setAvailabilityData(processedAvailability);
+      } else {
+        console.error('Failed to fetch availability data:', availabilityResponse.status);
       }
     } catch (error) {
       console.error('Error fetching availability data:', error);
@@ -717,6 +744,12 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     setInitialFlights(null);
     setAvailabilityData({});
     setIsLoadingAvailability(false);
+    setStartDate(null); // Clear the start date
+    
+    // Clear any stopover information in the FlightAvailabilityCalendar
+    if (window.clearStopoverInfo && typeof window.clearStopoverInfo === 'function') {
+      window.clearStopoverInfo();
+    }
   };
 
   const handleFlightSelect = (flight, segmentIndex) => {

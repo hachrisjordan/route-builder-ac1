@@ -207,29 +207,38 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     }
   }, [flightData]);
 
-  // Modify the handleSearch handler to include stopover info and logging
+  // Modify the handleSearch handler to clear flight selections
   const handleSearch = () => {
-    // Only include stopover info if both connection and days are selected
-    const stopoverInfo = selectedConnection && stopoverDays ? {
+    if (!selectionStart || !selectionEnd) {
+      setError('Please select a date range');
+      return;
+    }
+    
+    if (selectedConnection && !stopoverDays) {
+      setError('Please specify stopover days');
+      return;
+    }
+    
+    setError('');
+    
+    // Create stopover info object if a connection is selected
+    const stopoverInfo = selectedConnection ? {
       airport: selectedConnection,
-      days: parseInt(stopoverDays)  // Ensure days is a number
+      days: stopoverDays
     } : null;
-
-    // Enhanced logging
-    console.log('\n=== FlightAvailabilityCalendar Search Parameters ===');
-    console.log('Start Date:', selectionStart);
-    console.log('End Date:', selectionEnd);
-    console.log('Stopover Info:', JSON.stringify(stopoverInfo, null, 2));
-    console.log('Selected Connection:', selectedConnection);
-    console.log('Stopover Days:', stopoverDays);
-    console.log('Current Route:', currentRoute);
-
-    // Call onSearch with all necessary information
-    if (selectionStart && selectionEnd) {
-      console.log('Calling onSearch with stopover:', JSON.stringify(stopoverInfo, null, 2));
-      onSearch(selectionStart, selectionEnd, stopoverInfo);
-    } else {
-      console.error('Missing date selection');
+    
+    console.log('Search with date range:', {
+      start: selectionStart,
+      end: selectionEnd,
+      stopover: stopoverInfo
+    });
+    
+    // Pass the selected date range to the parent component
+    onDateRangeSelect([selectionStart, selectionEnd]);
+    
+    // Call the search function with stopover info and clear selections flag
+    if (onSearch) {
+      onSearch(stopoverInfo, true, true); // Add flag to clear flight selections
     }
   };
 
@@ -244,6 +253,22 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     setIsModalOpen(false);
     clearStopoverSelections();
   };
+
+  // Add a function to clear stopover information
+  const clearStopoverInfo = () => {
+    setSelectedConnection(null);
+    setStopoverDays(null);
+  };
+  
+  // Expose the clearStopoverInfo function globally
+  useEffect(() => {
+    window.clearStopoverInfo = clearStopoverInfo;
+    
+    // Cleanup on unmount
+    return () => {
+      delete window.clearStopoverInfo;
+    };
+  }, []);
 
   return (
     <div>

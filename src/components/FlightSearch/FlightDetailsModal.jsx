@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, DatePicker, Input, Spin, Table, Button, Typography, Pagination } from 'antd';
+import { Modal, DatePicker, Input, Spin, Table, Button, Typography, Pagination, Space } from 'antd';
 import dayjs from 'dayjs';
 import { getSegmentColumns } from './segmentColumns';
 import useFlightDetails from './hooks/useFlightDetails';
@@ -9,7 +9,7 @@ import { airports } from './data/airports';
 import pricingData from './data/pricing.json';
 const { RangePicker } = DatePicker;
 
-const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
+const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
   const [dateRangeError, setDateRangeError] = useState(false);
   const {
     selectedDates,
@@ -27,7 +27,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
     isLoadingAvailability,
     setStartDate,
     startDate,
-  } = useFlightDetails(getSegmentColumns);
+  } = useFlightDetails(getSegmentColumns, startDay);
 
   // Add pagination state
   const [paginationState, setPaginationState] = useState({});
@@ -78,13 +78,16 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
     setDateRangeError(false);
   };
 
-  const handleCalendarSearchClick = (startDate, endDate, stopoverInfo) => {
+  const handleCalendarSearchClick = (stopoverInfo, preserveCalendarData = false, clearSelections = false) => {
     if (!selectedDates) {
       setDateRangeError(true);
       return;
     }
-    console.log('Modal passing stopover info:', JSON.stringify(stopoverInfo, null, 2));
-    handleDateSearch(currentRoute, stopoverInfo);
+    
+    setDateRangeError(false);
+    
+    // Pass the clearSelections flag to handleDateSearch
+    handleDateSearch(currentRoute, stopoverInfo, preserveCalendarData, clearSelections);
   };
 
   // Function to group flights by segment with safety checks
@@ -109,11 +112,20 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
     return Object.values(segments);
   };
 
+  // Handle modal close with cleanup
+  const handleModalClose = () => {
+    // Reset all details including stopover information
+    resetDetails();
+    
+    // Call the parent's onClose handler
+    onClose();
+  };
+
   return (
     <Modal
       title="Flight Details"
       open={isVisible}
-      onCancel={handleCancel}
+      onCancel={handleModalClose}
       footer={null}
       width={1600}
       styles={{
