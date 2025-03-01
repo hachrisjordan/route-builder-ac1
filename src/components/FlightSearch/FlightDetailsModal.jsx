@@ -408,12 +408,18 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                     let totalDistance = 0;
                     let businessDistance = 0;
                     let firstDistance = 0;
+                    let businessOnlyDistance = 0;  // New: for segments with only business (no first)
 
                     Object.entries(selectedFlights).forEach(([_, flights]) => {
                       flights.forEach(flight => {
                         const distance = parseInt(flight.distance || 0);
                         totalDistance += distance;
-                        if (flight.business && !flight.first) businessDistance += distance;
+                        
+                        // For Business Price: Include all segments with business class
+                        if (flight.business) businessDistance += distance;
+                        
+                        // For First Price: Only count business from segments without first
+                        if (flight.business && !flight.first) businessOnlyDistance += distance;
                         if (flight.first) firstDistance += distance;
                       });
                     });
@@ -435,6 +441,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                     // Calculate percentages
                     const businessPercentage = Math.round((businessDistance / totalDistance) * 100);
                     const firstPercentage = Math.round((firstDistance / totalDistance) * 100);
+                    const businessOnlyPercentage = Math.round((businessOnlyDistance / totalDistance) * 100);
 
                     // Add stopover fee if applicable
                     const stopoverExtra = hasStopover ? 5000 : 0;
@@ -445,8 +452,8 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                         `${(pricing.Business + stopoverExtra).toLocaleString()} (${businessPercentage}% J)` : '-',
                       firstPrice: pricing.First && firstPercentage > 0 ? 
                         `${(pricing.First + stopoverExtra).toLocaleString()} (${
-                          businessPercentage > 0 && firstPercentage > 0 
-                            ? `${firstPercentage}% F, ${businessPercentage}% J`
+                          firstPercentage > 0 && businessOnlyPercentage > 0 
+                            ? `${firstPercentage}% F, ${businessOnlyPercentage}% J`
                             : firstPercentage > 0 
                               ? `${firstPercentage}% F`
                               : '0%'
