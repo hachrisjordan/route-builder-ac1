@@ -180,7 +180,14 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                 <Table
                   columns={columns}
                   dataSource={segment.flights}
-                  pagination={false} // Remove pagination from table
+                  pagination={{
+                    total: segment.flights.length,
+                    pageSize: 5,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
+                    pageSizeOptions: ['5', '10', '20', '50']
+                  }}
                   size="small"
                 />
                 
@@ -241,11 +248,6 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                 title: 'From',
                 dataIndex: 'from',
                 key: 'from',
-                render: () => {
-                  const firstSegmentIndex = Math.min(...Object.keys(selectedFlights).map(Number));
-                  const firstFlight = selectedFlights[firstSegmentIndex]?.[0];
-                  return firstFlight?.from || '-';
-                }
               },
               {
                 title: 'To',
@@ -256,32 +258,51 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                 title: 'Airlines',
                 dataIndex: 'airlines',
                 key: 'airlines',
-                render: (airlinesList) => (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {airlinesList.split(', ').map(airlineName => {
-                      const airline = airlines.find(a => airlineName.startsWith(a.label.replace(` (${a.value})`, '')));
-                      const airlineCode = airline?.value;
-                      return (
-                        <div key={airlineCode} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <img 
-                            src={`${process.env.PUBLIC_URL}/${airlineCode}.png`}
-                            alt={airlineCode}
-                            style={{ 
-                              width: '24px', 
-                              height: '24px',
-                              objectFit: 'contain',
-                              borderRadius: '4px'
-                            }} 
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                            }}
-                          />
-                          {airlineName}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ),
+                render: (airlinesList) => {
+                  // More thorough safety checks
+                  if (!airlinesList || airlinesList === '-') return '-';
+                  
+                  try {
+                    const airlineArray = Array.isArray(airlinesList) ? airlinesList : airlinesList.split(', ');
+                    
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {airlineArray.map((airlineName, index) => {
+                          if (!airlineName) return null;
+                          
+                          const airline = airlines.find(a => 
+                            airlineName.startsWith(a.label?.replace(` (${a.value})`, ''))
+                          );
+                          const airlineCode = airline?.value;
+                          
+                          return (
+                            <div key={`${airlineCode}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {airlineCode && (
+                                <img 
+                                  src={`${process.env.PUBLIC_URL}/${airlineCode}.png`}
+                                  alt={airlineCode}
+                                  style={{ 
+                                    width: '24px', 
+                                    height: '24px',
+                                    objectFit: 'contain',
+                                    borderRadius: '4px'
+                                  }} 
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              {airlineName}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  } catch (error) {
+                    console.error('Error rendering airlines:', error);
+                    return '-';
+                  }
+                },
               },
               {
                 title: 'Duration',
@@ -302,174 +323,231 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                 title: 'Economy Price',
                 dataIndex: 'economyPrice',
                 key: 'economyPrice',
+                onCell: (_, index) => ({
+                  rowSpan: index === 0 ? 2 : 0, // Show only in first row
+                }),
               },
               {
                 title: 'Business Price (Max %)',
                 dataIndex: 'businessPrice',
                 key: 'businessPrice',
-                render: (text, record) => {
-                  if (text === 'N/A') return text;
-                  const [price, percentage] = text.split(' (');
-                  if (!percentage) return text;
-                  return `${price} (${percentage}`;
+                onCell: (_, index) => ({
+                  rowSpan: index === 0 ? 2 : 0, // Show only in first row
+                }),
+                render: (text) => {
+                  if (!text || text === 'N/A') return text;
+                  try {
+                    const [price, percentage] = text.split(' (');
+                    if (!percentage) return text;
+                    return `${price} (${percentage}`;
+                  } catch (error) {
+                    return text;
+                  }
                 }
               },
               {
                 title: 'First Price (Max %)',
                 dataIndex: 'firstPrice',
                 key: 'firstPrice',
-                render: (text, record) => {
-                  if (text === 'N/A') return text;
-                  const [price, percentage] = text.split(' (');
-                  if (!percentage) return text;
-                  return `${price} (${percentage}`;
+                onCell: (_, index) => ({
+                  rowSpan: index === 0 ? 2 : 0, // Show only in first row
+                }),
+                render: (text) => {
+                  if (!text || text === 'N/A') return text;
+                  try {
+                    const [price, percentage] = text.split(' (');
+                    if (!percentage) return text;
+                    return `${price} (${percentage}`;
+                  } catch (error) {
+                    return text;
+                  }
                 }
               },
             ]}
-            dataSource={[{
-              key: '1',
-              from: (() => {
-                const firstSegmentIndex = Math.min(...Object.keys(selectedFlights).map(Number));
-                const firstFlight = selectedFlights[firstSegmentIndex]?.[0];
-                return firstFlight?.from || '-';
-              })(),
-              to: (() => {
-                const lastSegmentIndex = Math.max(...Object.keys(selectedFlights).map(Number));
-                const lastFlight = selectedFlights[lastSegmentIndex]?.[0];
-                return lastFlight?.to || '-';
-              })(),
-              airlines: [...new Set(Object.values(selectedFlights).flatMap(flights => 
-                flights.map(f => f.airlines)
-              ))].join(', '),
-              duration: (() => {
-                let totalMinutes = 0;
-                const segments = Object.keys(selectedFlights).sort((a, b) => parseInt(a) - parseInt(b));
+            dataSource={(() => {
+              try {
+                const segments = Object.keys(selectedFlights).map(Number).sort((a, b) => a - b);
+                if (segments.length === 0) return [];
                 
-                segments.forEach(segmentIndex => {
-                  const flight = selectedFlights[segmentIndex][0];
-                  totalMinutes += parseInt(flight.duration);
-                  
-                  const nextSegmentIndex = (parseInt(segmentIndex) + 1).toString();
-                  if (selectedFlights[nextSegmentIndex]) {
-                    const currentFlight = selectedFlights[segmentIndex][0];
-                    const nextFlight = selectedFlights[nextSegmentIndex][0];
+                const firstSegmentIndex = Math.min(...segments);
+                const lastSegmentIndex = Math.max(...segments);
+                
+                // Helper function to get airlines string
+                const getAirlinesString = (segmentRange) => {
+                  try {
+                    const airlineSet = new Set(
+                      segmentRange
+                        .flatMap(i => selectedFlights[i]?.map(f => f.airlines))
+                        .filter(Boolean)
+                    );
+                    return Array.from(airlineSet).join(', ') || '-';
+                  } catch (error) {
+                    console.error('Error getting airlines string:', error);
+                    return '-';
+                  }
+                };
+
+                // Debug logging
+                console.log('Selected Flights:', selectedFlights);
+                console.log('Segments:', segments);
+                
+                // Calculate prices for the ENTIRE journey (origin to final destination)
+                const calculatePrices = (hasStopover) => {
+                  try {
+                    // Get origin and destination airports
+                    const originAirport = airports.find(a => a.IATA === selectedFlights[firstSegmentIndex]?.[0]?.from);
+                    const destAirport = airports.find(a => a.IATA === selectedFlights[lastSegmentIndex]?.[0]?.to);
                     
+                    if (!originAirport || !destAirport) return {
+                      economyPrice: '-',
+                      businessPrice: '-',
+                      firstPrice: '-'
+                    };
+
+                    // Calculate total distance and cabin class distances
+                    let totalDistance = 0;
+                    let businessDistance = 0;
+                    let firstDistance = 0;
+
+                    Object.entries(selectedFlights).forEach(([_, flights]) => {
+                      flights.forEach(flight => {
+                        const distance = parseInt(flight.distance || 0);
+                        totalDistance += distance;
+                        if (flight.business && !flight.first) businessDistance += distance;
+                        if (flight.first) firstDistance += distance;
+                      });
+                    });
+
+                    // Find matching price in pricing data
+                    const pricing = pricingData.find(p => 
+                      p["From Region"] === originAirport.Zone &&
+                      p["To Region"] === destAirport.Zone &&
+                      totalDistance >= p["Min Distance"] &&
+                      totalDistance <= p["Max Distance"]
+                    );
+
+                    if (!pricing) return {
+                      economyPrice: '-',
+                      businessPrice: '-',
+                      firstPrice: '-'
+                    };
+
+                    // Calculate percentages
+                    const businessPercentage = Math.round((businessDistance / totalDistance) * 100);
+                    const firstPercentage = Math.round((firstDistance / totalDistance) * 100);
+
+                    // Add stopover fee if applicable
+                    const stopoverExtra = hasStopover ? 5000 : 0;
+
+                    return {
+                      economyPrice: pricing.Economy ? (pricing.Economy + stopoverExtra).toLocaleString() : '-',
+                      businessPrice: pricing.Business ? 
+                        `${(pricing.Business + stopoverExtra).toLocaleString()} (${businessPercentage}% J)` : '-',
+                      firstPrice: pricing.First && firstPercentage > 0 ? 
+                        `${(pricing.First + stopoverExtra).toLocaleString()} (${
+                          businessPercentage > 0 && firstPercentage > 0 
+                            ? `${firstPercentage}% F, ${businessPercentage}% J`
+                            : firstPercentage > 0 
+                              ? `${firstPercentage}% F`
+                              : '0%'
+                        })` : '-'
+                    };
+                  } catch (error) {
+                    console.error('Error calculating prices:', error);
+                    return {
+                      economyPrice: '-',
+                      businessPrice: '-',
+                      firstPrice: '-'
+                    };
+                  }
+                };
+
+                // Find stopover point
+                let stopoverIndex = null;
+                for (let i = firstSegmentIndex; i < lastSegmentIndex; i++) {
+                  const currentFlight = selectedFlights[i]?.[0];
+                  const nextFlight = selectedFlights[i + 1]?.[0];
+                  
+                  if (currentFlight && nextFlight) {
                     const arrivalTime = dayjs(currentFlight.ArrivesAt);
                     const departureTime = dayjs(nextFlight.DepartsAt);
                     const layoverMinutes = departureTime.diff(arrivalTime, 'minute');
                     
-                    totalMinutes += layoverMinutes;
+                    if (layoverMinutes >= 24 * 60) {
+                      stopoverIndex = i;
+                      break;
+                    }
                   }
-                });
-                
-                const hours = Math.floor(totalMinutes / 60);
-                const minutes = totalMinutes % 60;
-                return `${hours}h ${minutes}m`;
-              })(),
-              departs: dayjs(selectedFlights[0]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
-              arrives: dayjs(selectedFlights[Object.keys(selectedFlights).length - 1]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
-              economyPrice: (() => {
-                // Get origin and destination airports
-                const originAirport = airports.find(a => a.IATA === selectedFlights[0]?.[0]?.from);
-                const destAirport = airports.find(a => a.IATA === selectedFlights[Object.keys(selectedFlights).length - 1]?.[0]?.to);
-                
-                if (!originAirport || !destAirport) return '-';
-
-                // Calculate total distance
-                let totalDistance = 0;
-                Object.values(selectedFlights).forEach(flights => {
-                  flights.forEach(flight => {
-                    totalDistance += parseInt(flight.distance || 0);
-                  });
-                });
-
-                // Find matching price in pricing data
-                const pricing = pricingData.find(p => 
-                  p["From Region"] === originAirport.Zone &&
-                  p["To Region"] === destAirport.Zone &&
-                  totalDistance >= p["Min Distance"] &&
-                  totalDistance <= p["Max Distance"]
-                );
-
-                return pricing ? pricing.Economy.toLocaleString() : '-';
-              })(),
-              businessPrice: (() => {
-                const firstSegmentIndex = Math.min(...Object.keys(selectedFlights).map(Number));
-                const lastSegmentIndex = Math.max(...Object.keys(selectedFlights).map(Number));
-                const originAirport = airports.find(a => a.IATA === selectedFlights[firstSegmentIndex]?.[0]?.from);
-                const destAirport = airports.find(a => a.IATA === selectedFlights[lastSegmentIndex]?.[0]?.to);
-                
-                if (!originAirport || !destAirport) return '-';
-
-                let totalDistance = 0;
-                let businessDistance = 0;
-
-                Object.entries(selectedFlights).forEach(([index, flights]) => {
-                  flights.forEach(flight => {
-                    const distance = parseInt(flight.distance || 0);
-                    totalDistance += distance;
-                    if (flight.business) businessDistance += distance;
-                  });
-                });
-
-                const businessPercentage = Math.round((businessDistance / totalDistance) * 100);
-
-                const pricing = pricingData.find(p => 
-                  p["From Region"] === originAirport.Zone &&
-                  p["To Region"] === destAirport.Zone &&
-                  totalDistance >= p["Min Distance"] &&
-                  totalDistance <= p["Max Distance"]
-                );
-
-                if (!pricing || !pricing.Business) return '-';
-                return `${pricing.Business.toLocaleString()} (${businessPercentage}% J)`;
-              })(),
-              firstPrice: (() => {
-                const firstSegmentIndex = Math.min(...Object.keys(selectedFlights).map(Number));
-                const lastSegmentIndex = Math.max(...Object.keys(selectedFlights).map(Number));
-                const originAirport = airports.find(a => a.IATA === selectedFlights[firstSegmentIndex]?.[0]?.from);
-                const destAirport = airports.find(a => a.IATA === selectedFlights[lastSegmentIndex]?.[0]?.to);
-                
-                if (!originAirport || !destAirport) return '-';
-
-                let totalDistance = 0;
-                let businessDistance = 0;
-                let firstDistance = 0;
-
-                Object.entries(selectedFlights).forEach(([index, flights]) => {
-                  flights.forEach(flight => {
-                    const distance = parseInt(flight.distance || 0);
-                    totalDistance += distance;
-                    if (flight.business && !flight.first) businessDistance += distance;
-                    if (flight.first) firstDistance += distance;
-                  });
-                });
-
-                const businessPercentage = Math.round((businessDistance / totalDistance) * 100);
-                const firstPercentage = Math.round((firstDistance / totalDistance) * 100);
-
-                const pricing = pricingData.find(p => 
-                  p["From Region"] === originAirport.Zone &&
-                  p["To Region"] === destAirport.Zone &&
-                  totalDistance >= p["Min Distance"] &&
-                  totalDistance <= p["Max Distance"]
-                );
-
-                // Return '-' if there are no First Class segments or no pricing data
-                if (!pricing || !pricing.First || firstPercentage === 0) return '-';
-
-                let percentageText = '';
-                if (businessPercentage > 0 && firstPercentage > 0) {
-                  percentageText = `${firstPercentage}% F, ${businessPercentage}% J)`;
-                } else if (firstPercentage > 0) {
-                  percentageText = `${firstPercentage}% F)`;
-                } else {
-                  percentageText = '0%)';
                 }
 
-                return `${pricing.First.toLocaleString()} (${percentageText}`;
-              })(),
-            }]}
+                // Calculate prices once for the entire journey
+                const prices = calculatePrices(stopoverIndex !== null);
+
+                // If no stopover found, return single row
+                if (stopoverIndex === null) {
+                  return [{
+                    key: '1',
+                    from: selectedFlights[firstSegmentIndex]?.[0]?.from || '-',
+                    to: selectedFlights[lastSegmentIndex]?.[0]?.to || '-',
+                    airlines: getAirlinesString(segments),
+                    duration: (() => {
+                      const firstDeparture = dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt);
+                      const finalArrival = dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt);
+                      const minutes = finalArrival.diff(firstDeparture, 'minute');
+                      const hours = Math.floor(minutes / 60);
+                      const remainingMinutes = minutes % 60;
+                      return `${hours}h ${remainingMinutes}m`;
+                    })(),
+                    departs: dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
+                    arrives: dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
+                    ...prices
+                  }];
+                }
+
+                // Split journey at stopover with merged price cells
+                return [
+                  {
+                    key: '1',
+                    from: selectedFlights[firstSegmentIndex]?.[0]?.from || '-',
+                    to: selectedFlights[stopoverIndex]?.[0]?.to || '-',
+                    airlines: getAirlinesString(segments.filter(i => i <= stopoverIndex)),
+                    duration: (() => {
+                      const firstDeparture = dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt);
+                      const stopoverArrival = dayjs(selectedFlights[stopoverIndex]?.[0]?.ArrivesAt);
+                      const minutes = stopoverArrival.diff(firstDeparture, 'minute');
+                      const hours = Math.floor(minutes / 60);
+                      const remainingMinutes = minutes % 60;
+                      return `${hours}h ${remainingMinutes}m`;
+                    })(),
+                    departs: dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
+                    arrives: dayjs(selectedFlights[stopoverIndex]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
+                    ...prices  // Same prices for first row
+                  },
+                  {
+                    key: '2',
+                    from: selectedFlights[stopoverIndex + 1]?.[0]?.from || '-',
+                    to: selectedFlights[lastSegmentIndex]?.[0]?.to || '-',
+                    airlines: getAirlinesString(segments.filter(i => i > stopoverIndex)),
+                    duration: (() => {
+                      const stopoverDeparture = dayjs(selectedFlights[stopoverIndex + 1]?.[0]?.DepartsAt);
+                      const finalArrival = dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt);
+                      const minutes = finalArrival.diff(stopoverDeparture, 'minute');
+                      const hours = Math.floor(minutes / 60);
+                      const remainingMinutes = minutes % 60;
+                      return `${hours}h ${remainingMinutes}m`;
+                    })(),
+                    departs: dayjs(selectedFlights[stopoverIndex + 1]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
+                    arrives: dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
+                    economyPrice: null,  // Will be hidden by rowSpan
+                    businessPrice: null, // Will be hidden by rowSpan
+                    firstPrice: null     // Will be hidden by rowSpan
+                  }
+                ];
+              } catch (error) {
+                console.error('Error generating dataSource:', error);
+                return [];
+              }
+            })()}
             pagination={false}
             size="small"
           />

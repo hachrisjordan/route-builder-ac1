@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Button, Card, Typography, Badge, Select, InputNumber } from 'antd';
 import dayjs from 'dayjs';
 import { airports } from './data/airports';
+import FlightDetailsModal from './FlightDetailsModal';
 
 const { Title } = Typography;
 
-const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelect, selectedRange, onSearch }) => {
+const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelect, selectedRange, onSearch, selectedFlights, pricingData }) => {
   const [currentMonth, setCurrentMonth] = useState(dayjs().month());
   const [currentYear, setCurrentYear] = useState(dayjs().year());
   const [selectionStart, setSelectionStart] = useState(null);
@@ -14,6 +15,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [stopoverDays, setStopoverDays] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Get days in month
   const getDaysInMonth = (year, month) => {
@@ -231,6 +233,18 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     }
   };
 
+  // Clear function to reset stopover selections
+  const clearStopoverSelections = () => {
+    setSelectedConnection(null);
+    setStopoverDays(null);
+  };
+
+  // Handle modal close
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    clearStopoverSelections();
+  };
+
   return (
     <div>
       {!showCalendar && (
@@ -388,7 +402,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                 onChange={(value) => {
                   setSelectedConnection(value);
                   if (!value) {
-                    setStopoverDays(null); // Reset days when connection is cleared
+                    setStopoverDays(null);
                   }
                 }}
                 options={connectionOptions}
@@ -403,7 +417,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                     min={1}
                     max={14}
                     value={stopoverDays}
-                    onChange={(value) => setStopoverDays(value)}  // Ensure value is passed directly
+                    onChange={(value) => setStopoverDays(value)}
                     placeholder="Days"
                   />
                   <span>days</span>
@@ -427,6 +441,14 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
           </div>
         </div>
       )}
+
+      <FlightDetailsModal
+        isModalOpen={isModalOpen}
+        onClose={handleModalClose}
+        selectedFlights={selectedFlights}
+        pricingData={pricingData}
+        currentRoute={currentRoute}
+      />
     </div>
   );
 };
