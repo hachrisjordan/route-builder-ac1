@@ -27,6 +27,32 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
     isLoadingAvailability,
   } = useFlightDetails(getSegmentColumns);
 
+  // Add pagination state
+  const [paginationState, setPaginationState] = useState({});
+  
+  // Add pagination config
+  const paginationConfig = {
+    pageSize: 5,
+    showSizeChanger: true,
+    pageSizeOptions: ['5', '10', '20', '50'],
+  };
+
+  // Function to handle pagination change
+  const handlePaginationChange = (segmentIndex, page, pageSize) => {
+    setPaginationState(prev => ({
+      ...prev,
+      [segmentIndex]: { page, pageSize }
+    }));
+  };
+
+  // Function to get paginated data for a segment
+  const getPaginatedData = (flights, segmentIndex) => {
+    const { page = 1, pageSize = paginationConfig.pageSize } = paginationState[segmentIndex] || {};
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    return flights.slice(start, end);
+  };
+
   // Clear data when modal closes
   useEffect(() => {
     if (!isVisible) {
@@ -79,15 +105,6 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
     }, {});
 
     return Object.values(segments);
-  };
-
-  // Add pagination settings
-  const paginationConfig = {
-    pageSize: 5,
-    showSizeChanger: true,
-    showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} flights`,
-    pageSizeOptions: ['5', '10', '20', '50'],
-    position: ['bottomLeft']
   };
 
   return (
@@ -163,11 +180,12 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                     Segment {segment.index+1} ({segment.route}):
                   </Typography.Title>
                   <div>
-                    {/* Pagination controls */}
                     <Pagination
                       size="small"
                       total={segment.flights.length}
-                      pageSize={paginationConfig.pageSize}
+                      pageSize={paginationState[segment.index]?.pageSize || paginationConfig.pageSize}
+                      current={paginationState[segment.index]?.page || 1}
+                      onChange={(page, pageSize) => handlePaginationChange(segment.index, page, pageSize)}
                       showSizeChanger={true}
                       showTotal={(total, range) => `${range[0]}-${range[1]} of ${total}`}
                       style={{ 
@@ -179,15 +197,8 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                 </div>
                 <Table
                   columns={columns}
-                  dataSource={segment.flights}
-                  pagination={{
-                    total: segment.flights.length,
-                    pageSize: 5,
-                    showSizeChanger: true,
-                    showQuickJumper: true,
-                    showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
-                    pageSizeOptions: ['5', '10', '20', '50']
-                  }}
+                  dataSource={getPaginatedData(segment.flights, segment.index)}
+                  pagination={false}
                   size="small"
                 />
                 

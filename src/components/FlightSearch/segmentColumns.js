@@ -106,17 +106,17 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
       }
     },
     { 
+      title: 'Aircraft', 
+      dataIndex: 'aircraft', 
+      width: 240,
+      sorter: (a, b) => a.aircraft.localeCompare(b.aircraft)
+    },
+    { 
       title: 'Duration',
       dataIndex: 'duration',
       width: 20,
       sorter: (a, b) => a.duration - b.duration,
       render: (duration) => formatDuration(duration)
-    },
-    { 
-      title: 'Aircraft', 
-      dataIndex: 'aircraft', 
-      width: 240,
-      sorter: (a, b) => a.aircraft.localeCompare(b.aircraft)
     },
     { 
       title: 'Departs', 

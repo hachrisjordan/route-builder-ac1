@@ -28,6 +28,7 @@ const airlines = [
   { value: 'EN', label: 'Air Dolomiti (EN)' },
   { value: 'TK', label: 'Turkish Airlines (TK)' },
   { value: 'CX', label: 'Cathay Pacific (CX)' },
+  { value: 'VA', label: 'Virgin Australia (VA)' },
 ]
 
 export default airlines;
