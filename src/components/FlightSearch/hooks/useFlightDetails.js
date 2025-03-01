@@ -18,6 +18,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
   const [initialFlights, setInitialFlights] = useState(null);
   const [availabilityData, setAvailabilityData] = useState({});
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
+  const [startDate, setStartDate] = useState(null);
   const combinationsRef = useRef([]);
 
   // Update localStorage when apiKey changes
@@ -653,8 +654,16 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     try {
       // Fetch availability data
       const routeString = currentRoute.join('-');
+      
+      // Add startDate parameter if available
+      let url = `https://backend-284998006367.us-central1.run.app/api/availability/${routeString}`;
+      if (startDate) {
+        const formattedDate = dayjs(startDate).format('YYYY-MM-DD');
+        url += `?startDate=${formattedDate}`;
+      }
+      
       const availabilityResponse = await fetch(
-        `https://backend-284998006367.us-central1.run.app/api/availability/${routeString}`,
+        url,
         {
           method: 'GET',
           headers: {
@@ -877,5 +886,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     selectedFlights,
     availabilityData,
     isLoadingAvailability,
+    startDate,
+    setStartDate,
   };
 } 

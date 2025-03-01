@@ -25,6 +25,8 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
     selectedFlights,
     availabilityData,
     isLoadingAvailability,
+    setStartDate,
+    startDate,
   } = useFlightDetails(getSegmentColumns);
 
   // Add pagination state
@@ -133,6 +135,17 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               style={{ flex: 1 }}
+            />
+            <DatePicker 
+              placeholder="Calendar start on (optional)"
+              onChange={(date) => setStartDate(date)}
+              disabledDate={(current) => {
+                // Disable dates before today and after 330 days from today
+                const today = dayjs().startOf('day');
+                const maxDate = today.add(330, 'days');
+                return current && (current < today || current > maxDate);
+              }}
+              style={{ width: 200, marginLeft: 8 }}
             />
             <Button
               type="primary"
@@ -415,16 +428,11 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                       firstPrice: '-'
                     };
 
-                    // Check if all segments have economy availability
-                    const allSegmentsHaveEconomy = Object.values(selectedFlights).every(flights => 
-                      flights.some(flight => flight.economy)
-                    );
-
                     // Calculate total distance and cabin class distances
                     let totalDistance = 0;
                     let businessDistance = 0;
                     let firstDistance = 0;
-                    let businessOnlyDistance = 0;  // For segments with only business (no first)
+                    let businessOnlyDistance = 0;  // New: for segments with only business (no first)
 
                     Object.entries(selectedFlights).forEach(([_, flights]) => {
                       flights.forEach(flight => {
@@ -463,8 +471,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                     const stopoverExtra = hasStopover ? 5000 : 0;
 
                     return {
-                      economyPrice: (pricing.Economy && allSegmentsHaveEconomy) ? 
-                        (pricing.Economy + stopoverExtra).toLocaleString() : '-',
+                      economyPrice: pricing.Economy ? (pricing.Economy + stopoverExtra).toLocaleString() : '-',
                       businessPrice: pricing.Business ? 
                         `${(pricing.Business + stopoverExtra).toLocaleString()} (${businessPercentage}% J)` : '-',
                       firstPrice: pricing.First && firstPercentage > 0 ? 
@@ -484,46 +491,6 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                       firstPrice: '-'
                     };
                   }
-                };
-
-                // Helper function to calculate duration including layovers
-                const calculateTotalDuration = (startSegmentIndex, endSegmentIndex) => {
-                  let totalMinutes = 0;
-                  
-                  // Add each segment's flight duration
-                  for (let i = startSegmentIndex; i <= endSegmentIndex; i++) {
-                    const flight = selectedFlights[i]?.[0];
-                    if (flight) {
-                      // Add flight duration (either from the duration property or calculate it)
-                      if (flight.duration) {
-                        // If duration is already in minutes
-                        totalMinutes += parseInt(flight.duration);
-                      } else if (flight.DepartsAt && flight.ArrivesAt) {
-                        // Calculate duration from departure and arrival times
-                        const departureTime = dayjs(flight.DepartsAt);
-                        const arrivalTime = dayjs(flight.ArrivesAt);
-                        totalMinutes += arrivalTime.diff(departureTime, 'minute');
-                      }
-                    }
-                  }
-                  
-                  // Add layover durations between segments
-                  for (let i = startSegmentIndex; i < endSegmentIndex; i++) {
-                    const currentFlight = selectedFlights[i]?.[0];
-                    const nextFlight = selectedFlights[i + 1]?.[0];
-                    
-                    if (currentFlight && nextFlight && currentFlight.ArrivesAt && nextFlight.DepartsAt) {
-                      const arrivalTime = dayjs(currentFlight.ArrivesAt);
-                      const departureTime = dayjs(nextFlight.DepartsAt);
-                      const layoverMinutes = departureTime.diff(arrivalTime, 'minute');
-                      totalMinutes += layoverMinutes;
-                    }
-                  }
-                  
-                  // Format the duration
-                  const hours = Math.floor(totalMinutes / 60);
-                  const remainingMinutes = totalMinutes % 60;
-                  return `${hours}h ${remainingMinutes}m`;
                 };
 
                 // Find stopover point
@@ -554,7 +521,14 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                     from: selectedFlights[firstSegmentIndex]?.[0]?.from || '-',
                     to: selectedFlights[lastSegmentIndex]?.[0]?.to || '-',
                     airlines: getAirlinesString(segments),
-                    duration: calculateTotalDuration(firstSegmentIndex, lastSegmentIndex),
+                    duration: (() => {
+                      const firstDeparture = dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt);
+                      const finalArrival = dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt);
+                      const minutes = finalArrival.diff(firstDeparture, 'minute');
+                      const hours = Math.floor(minutes / 60);
+                      const remainingMinutes = minutes % 60;
+                      return `${hours}h ${remainingMinutes}m`;
+                    })(),
                     departs: dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
                     arrives: dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
                     ...prices
@@ -568,7 +542,14 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                     from: selectedFlights[firstSegmentIndex]?.[0]?.from || '-',
                     to: selectedFlights[stopoverIndex]?.[0]?.to || '-',
                     airlines: getAirlinesString(segments.filter(i => i <= stopoverIndex)),
-                    duration: calculateTotalDuration(firstSegmentIndex, stopoverIndex),
+                    duration: (() => {
+                      const firstDeparture = dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt);
+                      const stopoverArrival = dayjs(selectedFlights[stopoverIndex]?.[0]?.ArrivesAt);
+                      const minutes = stopoverArrival.diff(firstDeparture, 'minute');
+                      const hours = Math.floor(minutes / 60);
+                      const remainingMinutes = minutes % 60;
+                      return `${hours}h ${remainingMinutes}m`;
+                    })(),
                     departs: dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
                     arrives: dayjs(selectedFlights[stopoverIndex]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
                     ...prices  // Same prices for first row
@@ -578,7 +559,14 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose }) => {
                     from: selectedFlights[stopoverIndex + 1]?.[0]?.from || '-',
                     to: selectedFlights[lastSegmentIndex]?.[0]?.to || '-',
                     airlines: getAirlinesString(segments.filter(i => i > stopoverIndex)),
-                    duration: calculateTotalDuration(stopoverIndex + 1, lastSegmentIndex),
+                    duration: (() => {
+                      const stopoverDeparture = dayjs(selectedFlights[stopoverIndex + 1]?.[0]?.DepartsAt);
+                      const finalArrival = dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt);
+                      const minutes = finalArrival.diff(stopoverDeparture, 'minute');
+                      const hours = Math.floor(minutes / 60);
+                      const remainingMinutes = minutes % 60;
+                      return `${hours}h ${remainingMinutes}m`;
+                    })(),
                     departs: dayjs(selectedFlights[stopoverIndex + 1]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
                     arrives: dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
                     economyPrice: null,  // Will be hidden by rowSpan
