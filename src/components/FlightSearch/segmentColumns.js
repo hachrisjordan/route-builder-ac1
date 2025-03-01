@@ -141,29 +141,44 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
         return aTime - bTime;
       }
     },
-    { 
-      title: 'Economy', 
-      dataIndex: 'economy', 
-      width: 40,
-      align: 'center',
-      sorter: (a, b) => (a.economy === b.economy ? 0 : a.economy ? -1 : 1),
-      render: hasClass => hasClass ? <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#52c41a', margin: 'auto' }} /> : null
+    {
+      title: 'Economy',
+      dataIndex: 'economy',
+      key: 'economy',
+      width: 20,
+      sorter: (a, b) => {
+        // Sort by availability (true comes before false)
+        return (a.economy === true ? 1 : 0) - (b.economy === true ? 1 : 0);
+      },
+      render: (economy) => economy ? 
+        <span style={{ color: '#52c41a', fontSize: '16px' }}>●</span> : 
+        <span style={{ color: '#d9d9d9' }}>-</span>
     },
-    { 
-      title: 'Business', 
-      dataIndex: 'business', 
-      width: 40,
-      align: 'center',
-      sorter: (a, b) => (a.business === b.business ? 0 : a.business ? -1 : 1),
-      render: hasClass => hasClass ? <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#52c41a', margin: 'auto' }} /> : null
+    {
+      title: 'Business',
+      dataIndex: 'business',
+      key: 'business',
+      width: 20,
+      sorter: (a, b) => {
+        // Sort by availability (true comes before false)
+        return (a.business === true ? 1 : 0) - (b.business === true ? 1 : 0);
+      },
+      render: (business) => business ? 
+        <span style={{ color: '#52c41a', fontSize: '16px' }}>●</span> : 
+        <span style={{ color: '#d9d9d9' }}>-</span>
     },
-    { 
-      title: 'First', 
-      dataIndex: 'first', 
-      width: 40,
-      align: 'center',
-      sorter: (a, b) => (a.first === b.first ? 0 : a.first ? -1 : 1),
-      render: hasClass => hasClass ? <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#52c41a', margin: 'auto' }} /> : null
+    {
+      title: 'First',
+      dataIndex: 'first',
+      key: 'first',
+      width: 20,
+      sorter: (a, b) => {
+        // Sort by availability (true comes before false)
+        return (a.first === true ? 1 : 0) - (b.first === true ? 1 : 0);
+      },
+      render: (first) => first ? 
+        <span style={{ color: '#52c41a', fontSize: '16px' }}>●</span> : 
+        <span style={{ color: '#d9d9d9' }}>-</span>
     }
   ];
 }; 

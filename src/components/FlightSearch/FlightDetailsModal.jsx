@@ -29,7 +29,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
     startDate,
   } = useFlightDetails(getSegmentColumns, startDay);
 
-  // Add pagination state
+  // Add pagination state with sorting
   const [paginationState, setPaginationState] = useState({});
   
   // Add pagination config
@@ -43,7 +43,11 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
   const handlePaginationChange = (segmentIndex, page, pageSize) => {
     setPaginationState(prev => ({
       ...prev,
-      [segmentIndex]: { page, pageSize }
+      [segmentIndex]: {
+        ...prev[segmentIndex], // Preserve sorting if it exists
+        page,
+        pageSize
+      }
     }));
   };
 
@@ -109,33 +113,172 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
       return acc;
     }, {});
 
-    return Object.values(segments);
+    return Object.entries(segments)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+      .map(([segmentIndex, flights]) => {
+        // Create a deep copy of flights to avoid modifying the original data
+        const flightsCopy = JSON.parse(JSON.stringify(flights.flights));
+        
+        // Get pagination state for this segment
+        const { page = 1, pageSize = paginationConfig.pageSize, sortField, sortOrder } = 
+          paginationState[segmentIndex] || {};
+        
+        // Sort the entire dataset if sorting is applied
+        if (sortField && sortOrder) {
+          flightsCopy.sort((a, b) => {
+            let aValue, bValue;
+            
+            // Special handling for cabin class columns
+            if (sortField === 'economy' || sortField === 'business' || sortField === 'first') {
+              // For cabin classes, true sorts before false
+              aValue = a[sortField] === true ? 1 : 0;
+              bValue = b[sortField] === true ? 1 : 0;
+            } else {
+              aValue = a[sortField];
+              bValue = b[sortField];
+            }
+            
+            // Handle different data types
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+              return sortOrder === 'ascend' 
+                ? aValue.localeCompare(bValue) 
+                : bValue.localeCompare(aValue);
+            } else if (sortField === 'duration') {
+              // For duration, convert to minutes if it's a string like "2h 30m"
+              if (typeof aValue === 'string' && aValue.includes('h')) {
+                const [aHours, aMinutes] = aValue.split('h').map(part => parseInt(part) || 0);
+                aValue = aHours * 60 + aMinutes;
+              }
+              if (typeof bValue === 'string' && bValue.includes('h')) {
+                const [bHours, bMinutes] = bValue.split('h').map(part => parseInt(part) || 0);
+                bValue = bHours * 60 + bMinutes;
+              }
+              return sortOrder === 'ascend' ? aValue - bValue : bValue - aValue;
+            } else {
+              // For numbers and other types
+              return sortOrder === 'ascend' 
+                ? (aValue > bValue ? 1 : -1) 
+                : (bValue > aValue ? 1 : -1);
+            }
+          });
+        }
+        
+        // Calculate pagination
+        const start = (page - 1) * pageSize;
+        const end = start + pageSize;
+        const paginatedFlights = flightsCopy.slice(start, end);
+        
+        return {
+          index: parseInt(segmentIndex),
+          route: `${flights.flights[0]?.from || '?'}-${flights.flights[0]?.to || '?'}`,
+          flights: paginatedFlights,
+          allFlights: flightsCopy, // Keep the full sorted dataset
+          total: flightsCopy.length
+        };
+      });
   };
 
-  // Handle modal close with cleanup
+  // Update the handleTableChange function to handle sorting
+  const handleTableChange = (segmentIndex, pagination, filters, sorter) => {
+    setPaginationState(prev => ({
+      ...prev,
+      [segmentIndex]: {
+        page: pagination.current,
+        pageSize: pagination.pageSize,
+        sortField: sorter.field,
+        sortOrder: sorter.order
+      }
+    }));
+  };
+
+  // Handle modal close with complete cleanup
   const handleModalClose = () => {
-    // Reset all details including stopover information
+    // Reset all details including selected dates
     resetDetails();
+    
+    // Explicitly clear selected dates
+    setSelectedDates(null);
     
     // Call the parent's onClose handler
     onClose();
+  };
+
+  // Calculate total journey duration by summing segment durations and layovers
+  const calculateTotalDuration = (segments) => {
+    try {
+      let totalMinutes = 0;
+      
+      // Add each segment's flight duration
+      segments.forEach(segmentIndex => {
+        const flight = selectedFlights[segmentIndex]?.[0];
+        if (flight) {
+          // Convert duration string (e.g., "6:25" or "6h 25m") to minutes
+          if (typeof flight.duration === 'string') {
+            if (flight.duration.includes('h')) {
+              // Format: "6h 25m"
+              const [hours, minutes] = flight.duration.split('h').map(part => 
+                parseInt(part.replace(/[^0-9]/g, '') || 0)
+              );
+              totalMinutes += (hours * 60) + minutes;
+            } else if (flight.duration.includes(':')) {
+              // Format: "6:25"
+              const [hours, minutes] = flight.duration.split(':').map(Number);
+              totalMinutes += (hours * 60) + minutes;
+            } else {
+              // Try to parse as number
+              totalMinutes += parseInt(flight.duration) || 0;
+            }
+          } else if (typeof flight.duration === 'number') {
+            totalMinutes += flight.duration;
+          }
+        }
+      });
+      
+      // Add layover durations between segments
+      for (let i = 0; i < segments.length - 1; i++) {
+        const currentSegment = selectedFlights[segments[i]]?.[0];
+        const nextSegment = selectedFlights[segments[i + 1]]?.[0];
+        
+        if (currentSegment && nextSegment) {
+          const arrivalTime = dayjs(currentSegment.ArrivesAt);
+          const departureTime = dayjs(nextSegment.DepartsAt);
+          const layoverMinutes = departureTime.diff(arrivalTime, 'minute');
+          totalMinutes += layoverMinutes;
+        }
+      }
+      
+      // Format the total duration
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return `${hours}h ${minutes}m`;
+    } catch (error) {
+      console.error('Error calculating total duration:', error);
+      return 'N/A';
+    }
   };
 
   return (
     <Modal
       title="Flight Details"
       open={isVisible}
-      onCancel={handleModalClose}
-      footer={null}
+      onOk={handleDateSearch}
+      onCancel={() => {
+        onClose();
+        resetDetails();
+      }}
+      okText="Search Flights"
+      okButtonProps={{ 
+        disabled: !apiKey,
+        loading: isLoadingSegments 
+      }}
       width={1600}
       styles={{
         body: { 
           padding: '12px',
-          maxHeight: '90vh',
-          overflow: 'auto'
+          maxWidth: '100%'
         },
-        content: {
-          maxWidth: '100vw'
+        wrapper: {
+          top: '-80px' // Position the modal 16px from the top
         }
       }}
     >
@@ -154,7 +297,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
               disabledDate={(current) => {
                 // Disable dates before today and after 330 days from today
                 const today = dayjs().startOf('day');
-                const maxDate = today.add(330, 'days');
+                const maxDate = today.add(305, 'days');
                 return current && (current < today || current > maxDate);
               }}
               style={{ width: 200, marginLeft: 8 }}
@@ -207,7 +350,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
                   <div>
                     <Pagination
                       size="small"
-                      total={segment.flights.length}
+                      total={segment.total}
                       pageSize={paginationState[segment.index]?.pageSize || paginationConfig.pageSize}
                       current={paginationState[segment.index]?.page || 1}
                       onChange={(page, pageSize) => handlePaginationChange(segment.index, page, pageSize)}
@@ -222,9 +365,12 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
                 </div>
                 <Table
                   columns={columns}
-                  dataSource={getPaginatedData(segment.flights, segment.index)}
+                  dataSource={segment.flights}
                   pagination={false}
                   size="small"
+                  onChange={(pagination, filters, sorter) => 
+                    handleTableChange(segment.index, pagination, filters, sorter)
+                  }
                 />
                 
                 {/* Add layover duration if there's a next segment and flights are selected */}
@@ -484,8 +630,10 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
 
                     return {
                       economyPrice: pricing.Economy ? (pricing.Economy + stopoverExtra).toLocaleString() : '-',
-                      businessPrice: pricing.Business ? 
+                      // If business percentage is 0, show "-" instead of price
+                      businessPrice: pricing.Business && businessPercentage > 0 ? 
                         `${(pricing.Business + stopoverExtra).toLocaleString()} (${businessPercentage}% J)` : '-',
+                      // If first percentage is 0, show "-" instead of price
                       firstPrice: pricing.First && firstPercentage > 0 ? 
                         `${(pricing.First + stopoverExtra).toLocaleString()} (${
                           firstPercentage > 0 && businessOnlyPercentage > 0 
@@ -526,6 +674,9 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
                 // Calculate prices once for the entire journey
                 const prices = calculatePrices(stopoverIndex !== null);
 
+                // Calculate total journey duration by summing segment durations and layovers
+                const totalDuration = calculateTotalDuration(segments);
+
                 // If no stopover found, return single row
                 if (stopoverIndex === null) {
                   return [{
@@ -533,14 +684,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
                     from: selectedFlights[firstSegmentIndex]?.[0]?.from || '-',
                     to: selectedFlights[lastSegmentIndex]?.[0]?.to || '-',
                     airlines: getAirlinesString(segments),
-                    duration: (() => {
-                      const firstDeparture = dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt);
-                      const finalArrival = dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt);
-                      const minutes = finalArrival.diff(firstDeparture, 'minute');
-                      const hours = Math.floor(minutes / 60);
-                      const remainingMinutes = minutes % 60;
-                      return `${hours}h ${remainingMinutes}m`;
-                    })(),
+                    duration: totalDuration,
                     departs: dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
                     arrives: dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
                     ...prices
@@ -554,14 +698,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
                     from: selectedFlights[firstSegmentIndex]?.[0]?.from || '-',
                     to: selectedFlights[stopoverIndex]?.[0]?.to || '-',
                     airlines: getAirlinesString(segments.filter(i => i <= stopoverIndex)),
-                    duration: (() => {
-                      const firstDeparture = dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt);
-                      const stopoverArrival = dayjs(selectedFlights[stopoverIndex]?.[0]?.ArrivesAt);
-                      const minutes = stopoverArrival.diff(firstDeparture, 'minute');
-                      const hours = Math.floor(minutes / 60);
-                      const remainingMinutes = minutes % 60;
-                      return `${hours}h ${remainingMinutes}m`;
-                    })(),
+                    duration: calculateTotalDuration(segments.filter(i => i <= stopoverIndex)),
                     departs: dayjs(selectedFlights[firstSegmentIndex]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
                     arrives: dayjs(selectedFlights[stopoverIndex]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
                     ...prices  // Same prices for first row
@@ -571,14 +708,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
                     from: selectedFlights[stopoverIndex + 1]?.[0]?.from || '-',
                     to: selectedFlights[lastSegmentIndex]?.[0]?.to || '-',
                     airlines: getAirlinesString(segments.filter(i => i > stopoverIndex)),
-                    duration: (() => {
-                      const stopoverDeparture = dayjs(selectedFlights[stopoverIndex + 1]?.[0]?.DepartsAt);
-                      const finalArrival = dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt);
-                      const minutes = finalArrival.diff(stopoverDeparture, 'minute');
-                      const hours = Math.floor(minutes / 60);
-                      const remainingMinutes = minutes % 60;
-                      return `${hours}h ${remainingMinutes}m`;
-                    })(),
+                    duration: calculateTotalDuration(segments.filter(i => i > stopoverIndex)),
                     departs: dayjs(selectedFlights[stopoverIndex + 1]?.[0]?.DepartsAt).format('HH:mm MM-DD'),
                     arrives: dayjs(selectedFlights[lastSegmentIndex]?.[0]?.ArrivesAt).format('HH:mm MM-DD'),
                     economyPrice: null,  // Will be hidden by rowSpan
@@ -671,6 +801,22 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
       `}</style>
     </Modal>
   );
+};
+
+// Helper function to format duration
+const formatDuration = (duration) => {
+  if (typeof duration === 'string' && duration.includes('h')) {
+    return duration; // Already formatted
+  }
+  
+  // If it's a number (minutes)
+  if (typeof duration === 'number') {
+    const hours = Math.floor(duration / 60);
+    const minutes = duration % 60;
+    return `${hours}h ${minutes}m`;
+  }
+  
+  return duration; // Return as is if we can't format it
 };
 
 export default FlightDetailsModal; 

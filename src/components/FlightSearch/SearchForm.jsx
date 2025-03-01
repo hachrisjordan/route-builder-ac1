@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Select, InputNumber, Button, Card } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { SearchOutlined, SwapOutlined } from '@ant-design/icons';
 import { airports } from '../../data/airports';
 import airlines from '../../data/airlines';
 
@@ -89,6 +89,13 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
     });
   };
 
+  // Function to swap departure and arrival airports
+  const swapAirports = () => {
+    const temp = departure;
+    setDeparture(arrival);
+    setArrival(temp);
+  };
+
   return (
     <Card className="search-form">
       <div className="flight-search-element">
@@ -100,6 +107,15 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
           placeholder="Select departure airport..."
           className="airport-select"
           status={errors.departure ? 'error' : ''}
+        />
+      </div>
+
+      <div className="swap-button-container">
+        <Button 
+          icon={<SwapOutlined />} 
+          onClick={swapAirports}
+          type="text"
+          className="swap-button"
         />
       </div>
 
@@ -173,6 +189,14 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
         .search-button {
           margin-top: 24px;
           width: 100%;
+        }
+        .swap-button-container {
+          display: flex;
+          justify-content: center;
+          margin-bottom: 0;
+        }
+        .swap-button {
+          padding: 0 8px;
         }
       `}</style>
     </Card>

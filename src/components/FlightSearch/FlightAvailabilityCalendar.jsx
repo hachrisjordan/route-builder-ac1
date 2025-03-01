@@ -187,6 +187,13 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
 
   const handleApplyClick = () => {
     setShowCalendar(true);
+    
+    // If there's a start date selected, switch to that month
+    if (selectedRange && selectedRange[0]) {
+      const selectedDate = dayjs(selectedRange[0]);
+      setCurrentMonth(selectedDate.month());
+      setCurrentYear(selectedDate.year());
+    }
   };
 
   // Get unique connection points from currentRoute with full airport names
@@ -200,15 +207,31 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
       };
     });
 
-  // Add useEffect to show calendar when flightData changes
-  useEffect(() => {
-    if (flightData && Object.keys(flightData).length > 0) {
-      setShowCalendar(true);
-    }
-  }, [flightData]);
+  // Add this function to directly set the calendar to a specific month/year
+  const setCalendarToDate = (date) => {
+    if (!date) return;
+    
+    // Ensure we have a dayjs object
+    const dayjsDate = dayjs.isDayjs(date) ? date : dayjs(date);
+    
+    // Log for debugging
+    console.log('Setting calendar to date:', dayjsDate.format('YYYY-MM-DD'));
+    console.log('Month:', dayjsDate.month(), 'Year:', dayjsDate.year());
+    
+    // Force update the calendar view
+    setCurrentMonth(dayjsDate.month());
+    setCurrentYear(dayjsDate.year());
+  };
 
-  // Modify the handleSearch handler to clear flight selections
-  const handleSearch = () => {
+  // Update the useEffect to use our new function
+  useEffect(() => {
+    if (selectedRange && selectedRange[0]) {
+      setCalendarToDate(selectedRange[0]);
+    }
+  }, [selectedRange]);
+
+  // Update the handleSearch function to also set the calendar month
+  const handleSearch = (stopoverInfo, preserveCalendarData = false, clearSelections = false) => {
     if (!selectionStart || !selectionEnd) {
       setError('Please select a date range');
       return;
@@ -221,8 +244,11 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     
     setError('');
     
+    // Set the calendar to the first selected date
+    setCalendarToDate(selectionStart);
+    
     // Create stopover info object if a connection is selected
-    const stopoverInfo = selectedConnection ? {
+    const stopoverInfoObj = selectedConnection ? {
       airport: selectedConnection,
       days: stopoverDays
     } : null;
@@ -230,7 +256,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     console.log('Search with date range:', {
       start: selectionStart,
       end: selectionEnd,
-      stopover: stopoverInfo
+      stopover: stopoverInfoObj
     });
     
     // Pass the selected date range to the parent component
@@ -238,9 +264,23 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     
     // Call the search function with stopover info and clear selections flag
     if (onSearch) {
-      onSearch(stopoverInfo, true, true); // Add flag to clear flight selections
+      onSearch(stopoverInfoObj, true, true); // Add flag to clear flight selections
     }
   };
+
+  // Add an effect to handle when the component receives new data
+  useEffect(() => {
+    if (flightData && flightData.length > 0) {
+      // Find the first date with data
+      const firstDateWithData = Object.keys(flightData[0]?.dates || {})
+        .sort()
+        .find(date => flightData[0].dates[date]?.length > 0);
+        
+      if (firstDateWithData) {
+        setCalendarToDate(firstDateWithData);
+      }
+    }
+  }, [flightData]);
 
   // Clear function to reset stopover selections
   const clearStopoverSelections = () => {
@@ -260,13 +300,23 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     setStopoverDays(null);
   };
   
-  // Expose the clearStopoverInfo function globally
+  // Add a function to hide the calendar
+  const hideCalendar = () => {
+    setShowCalendar(false);
+    setSelectionStart(null);
+    setSelectionEnd(null);
+    setError('');
+  };
+  
+  // Expose the functions globally
   useEffect(() => {
     window.clearStopoverInfo = clearStopoverInfo;
+    window.hideCalendar = hideCalendar;
     
     // Cleanup on unmount
     return () => {
       delete window.clearStopoverInfo;
+      delete window.hideCalendar;
     };
   }, []);
 
@@ -452,7 +502,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
               <Button
                 type="primary"
-                onClick={handleSearch}
+                onClick={() => handleSearch(null)}
                 disabled={!selectionStart || !selectionEnd || (selectedConnection && !stopoverDays)}
               >
                 Search

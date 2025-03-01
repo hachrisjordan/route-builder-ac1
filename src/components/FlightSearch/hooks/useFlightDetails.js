@@ -734,6 +734,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
   };
 
   const resetDetails = () => {
+    // Clear all data states
     setSegmentDetails([]);
     setIsLoadingSegments(false);
     setSelectedFlights({});
@@ -746,9 +747,19 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
     setIsLoadingAvailability(false);
     setStartDate(null); // Clear the start date
     
+    // Note: We don't clear selectedDates here because we do it explicitly in the modal close handler
+    
+    // Reset the combinations reference
+    combinationsRef.current = [];
+    
     // Clear any stopover information in the FlightAvailabilityCalendar
     if (window.clearStopoverInfo && typeof window.clearStopoverInfo === 'function') {
       window.clearStopoverInfo();
+    }
+    
+    // Clear calendar display
+    if (window.hideCalendar && typeof window.hideCalendar === 'function') {
+      window.hideCalendar();
     }
   };
 
