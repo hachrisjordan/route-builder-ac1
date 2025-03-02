@@ -7,6 +7,7 @@ import FlightAvailabilityCalendar from './FlightAvailabilityCalendar';
 import airlines from './data/airlines';
 import { airports } from './data/airports';
 import pricingData from './data/pricing.json';
+import { CalendarOutlined } from '@ant-design/icons';
 const { RangePicker } = DatePicker;
 
 const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
@@ -261,16 +262,11 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
     <Modal
       title="Flight Details"
       open={isVisible}
-      onOk={handleDateSearch}
       onCancel={() => {
         onClose();
         resetDetails();
       }}
-      okText="Search Flights"
-      okButtonProps={{ 
-        disabled: !apiKey,
-        loading: isLoadingSegments 
-      }}
+      footer={null}
       width={1600}
       styles={{
         body: { 
@@ -291,17 +287,31 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
               onChange={(e) => setApiKey(e.target.value)}
               style={{ flex: 1 }}
             />
-            <DatePicker 
-              placeholder="Calendar start on (optional)"
-              onChange={(date) => setStartDate(date)}
-              disabledDate={(current) => {
-                // Disable dates before today and after 330 days from today
-                const today = dayjs().startOf('day');
-                const maxDate = today.add(305, 'days');
-                return current && (current < today || current > maxDate);
-              }}
-              style={{ width: 200, marginLeft: 8 }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Button 
+                type="text" 
+                icon={<CalendarOutlined />} 
+                style={{ padding: '0 8px', marginRight: 4 }}
+                onClick={() => {
+                  // Find the DatePicker input and programmatically click it
+                  const datePickerInput = document.querySelector('.calendar-start-picker input');
+                  if (datePickerInput) datePickerInput.click();
+                }}
+              />
+              <DatePicker 
+                placeholder="Calendar start on (optional)"
+                onChange={(date) => setStartDate(date)}
+                disabledDate={(current) => {
+                  // Disable dates before today and after 330 days from today
+                  const today = dayjs().startOf('day');
+                  const maxDate = today.add(305, 'days');
+                  return current && (current < today || current > maxDate);
+                }}
+                style={{ width: 200 }}
+                className="calendar-start-picker"
+                suffixIcon={null} // Remove the default calendar icon
+              />
+            </div>
             <Button
               type="primary"
               disabled={!apiKey || !apiKey.toLowerCase().startsWith('pro')}

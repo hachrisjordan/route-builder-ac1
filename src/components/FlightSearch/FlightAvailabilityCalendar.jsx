@@ -185,15 +185,27 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
            date.isBefore(end.add(1, 'day'));
   };
 
-  const handleApplyClick = () => {
+  // Add a function to handle the Apply button click
+  const handleApplyClick = (stopoverInfo, preserveCalendarData = false, clearSelections = false) => {
+    // Make sure the calendar is visible
     setShowCalendar(true);
     
-    // If there's a start date selected, switch to that month
+    // If there are selected dates, move to the month of the first selected date
     if (selectedRange && selectedRange[0]) {
-      const selectedDate = dayjs(selectedRange[0]);
+      const selectedDate = dayjs.isDayjs(selectedRange[0]) 
+        ? selectedRange[0] 
+        : dayjs(selectedRange[0]);
+      
+      // Set the current month and year
       setCurrentMonth(selectedDate.month());
       setCurrentYear(selectedDate.year());
+      
+      console.log('Moving calendar to:', selectedDate.format('YYYY-MM-DD'));
+      console.log('Month:', selectedDate.month(), 'Year:', selectedDate.year());
     }
+    
+    // Call the original onSearch function
+    onSearch(stopoverInfo, preserveCalendarData, clearSelections);
   };
 
   // Get unique connection points from currentRoute with full airport names
@@ -226,7 +238,15 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
   // Update the useEffect to use our new function
   useEffect(() => {
     if (selectedRange && selectedRange[0]) {
-      setCalendarToDate(selectedRange[0]);
+      const selectedDate = dayjs.isDayjs(selectedRange[0]) 
+        ? selectedRange[0] 
+        : dayjs(selectedRange[0]);
+      
+      setCurrentMonth(selectedDate.month());
+      setCurrentYear(selectedDate.year());
+      
+      // Make sure the calendar is visible
+      setShowCalendar(true);
     }
   }, [selectedRange]);
 
@@ -323,7 +343,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
   return (
     <div>
       {!showCalendar && (
-        <Button onClick={handleApplyClick}>
+        <Button onClick={() => handleApplyClick()}>
           Show Calendar
         </Button>
       )}
