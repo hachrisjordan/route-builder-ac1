@@ -28,7 +28,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
     isLoadingAvailability,
     setStartDate,
     startDate,
-  } = useFlightDetails(getSegmentColumns, startDay);
+  } = useFlightDetails(() => getSegmentColumns(startDay), startDay);
 
   // Add pagination state with sorting
   const [paginationState, setPaginationState] = useState({});
@@ -39,6 +39,9 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
     showSizeChanger: true,
     pageSizeOptions: ['5', '10', '20', '50'],
   };
+
+  // Add state to control calendar visibility
+  const [showCalendar, setShowCalendar] = useState(false);
 
   // Function to handle pagination change
   const handlePaginationChange = (segmentIndex, page, pageSize) => {
@@ -67,6 +70,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
       setDateRangeError(false);
       setSelectedDates(null);
       setApiKey('');
+      setShowCalendar(false);
     }
   }, [isVisible]);
 
@@ -83,16 +87,45 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
     setDateRangeError(false);
   };
 
-  const handleCalendarSearchClick = (stopoverInfo, preserveCalendarData = false, clearSelections = false) => {
-    if (!selectedDates) {
-      setDateRangeError(true);
-      return;
-    }
+  // Update the handleCalendarSearch function
+  const handleCalendarSearchClick = () => {
+    // Show the calendar component
+    setShowCalendar(true);
     
-    setDateRangeError(false);
+    // Call the original calendar search function
+    handleCalendarSearch(currentRoute);
     
-    // Pass the clearSelections flag to handleDateSearch
-    handleDateSearch(currentRoute, stopoverInfo, preserveCalendarData, clearSelections);
+    // After a short delay to ensure the calendar component is rendered,
+    // try multiple approaches to open the calendar
+    setTimeout(() => {
+      // Try to find and click the calendar button
+      const calendarButtons = document.querySelectorAll('.flight-availability-calendar .ant-picker-calendar-header button, .flight-availability-calendar .ant-picker-calendar-date-panel');
+      
+      if (calendarButtons.length > 0) {
+        // Try each button we found
+        calendarButtons.forEach(button => {
+          try {
+            button.click();
+          } catch (e) {
+            console.log('Failed to click button:', e);
+          }
+        });
+      } else {
+        console.log('No calendar buttons found');
+        
+        // Alternative approach: try to dispatch a custom event
+        const calendarElement = document.querySelector('.flight-availability-calendar .ant-picker-calendar');
+        if (calendarElement) {
+          try {
+            // Create and dispatch a custom event to signal the calendar to open
+            const event = new CustomEvent('openCalendar', { bubbles: true });
+            calendarElement.dispatchEvent(event);
+          } catch (e) {
+            console.log('Failed to dispatch event:', e);
+          }
+        }
+      }
+    }, 500); // Increased delay to ensure component is fully rendered
   };
 
   // Function to group flights by segment with safety checks
@@ -274,7 +307,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
           maxWidth: '100%'
         },
         wrapper: {
-          top: '-80px' // Position the modal 16px from the top
+          top: '16px'
         }
       }}
     >
@@ -315,7 +348,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
             <Button
               type="primary"
               disabled={!apiKey || !apiKey.toLowerCase().startsWith('pro')}
-              onClick={() => handleCalendarSearch(currentRoute)}
+              onClick={handleCalendarSearchClick}
             >
               Apply
             </Button>
@@ -323,13 +356,16 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
         </div>
       </div>
 
-      <FlightAvailabilityCalendar 
-        flightData={availabilityData}
-        currentRoute={currentRoute}
-        onDateRangeSelect={handleCalendarDateSelect}
-        selectedRange={selectedDates}
-        onSearch={handleCalendarSearchClick}
-      />
+      {/* Only show the calendar if showCalendar is true */}
+      {showCalendar && (
+        <FlightAvailabilityCalendar 
+          flightData={availabilityData}
+          currentRoute={currentRoute}
+          onDateRangeSelect={handleCalendarDateSelect}
+          selectedRange={selectedDates}
+          onSearch={handleCalendarSearchClick}
+        />
+      )}
 
       {isLoadingSegments ? (
         <div style={{ textAlign: 'center', margin: '20px 0' }}>

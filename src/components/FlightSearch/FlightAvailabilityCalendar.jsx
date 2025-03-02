@@ -150,26 +150,30 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
 
   const handleDateClick = (dateString) => {
     if (!selectionStart) {
+      // First click - set start date
       setSelectionStart(dateString);
       setSelectionEnd(null);
       setError('');
     } else if (!selectionEnd) {
+      // Second click - set end date
       const start = dayjs(selectionStart);
       const end = dayjs(dateString);
       
       if (end.isBefore(start)) {
-        setError('End date cannot be before start date');
-        return;
-      }
-      
-      if (end.diff(start, 'days') > 7) {
+        // If end date is before start date, make it the new start date
+        setSelectionStart(dateString);
+        setSelectionEnd(null);
+        setError('');
+      } else if (end.diff(start, 'days') > 7) {
         setError('Date range cannot exceed 7 days');
         return;
+      } else {
+        // Normal case - end date is after start date
+        setSelectionEnd(dateString);
+        onDateRangeSelect([start, end]);
       }
-
-      setSelectionEnd(dateString);
-      onDateRangeSelect([start, end]);
     } else {
+      // Third click - reset and set new start date
       setSelectionStart(dateString);
       setSelectionEnd(null);
       setError('');
