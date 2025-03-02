@@ -321,11 +321,6 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
             </Button>
           </div>
         </div>
-        {dateRangeError && (
-          <div style={{ color: 'red' }}>
-            Please select a date range in the calendar
-          </div>
-        )}
       </div>
 
       <FlightAvailabilityCalendar 
