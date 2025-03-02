@@ -150,30 +150,26 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
 
   const handleDateClick = (dateString) => {
     if (!selectionStart) {
-      // First click - set start date
       setSelectionStart(dateString);
       setSelectionEnd(null);
       setError('');
     } else if (!selectionEnd) {
-      // Second click - set end date
       const start = dayjs(selectionStart);
       const end = dayjs(dateString);
       
       if (end.isBefore(start)) {
-        // If end date is before start date, make it the new start date
-        setSelectionStart(dateString);
-        setSelectionEnd(null);
-        setError('');
-      } else if (end.diff(start, 'days') > 7) {
+        setError('End date cannot be before start date');
+        return;
+      }
+      
+      if (end.diff(start, 'days') > 7) {
         setError('Date range cannot exceed 7 days');
         return;
-      } else {
-        // Normal case - end date is after start date
-        setSelectionEnd(dateString);
-        onDateRangeSelect([start, end]);
       }
+
+      setSelectionEnd(dateString);
+      onDateRangeSelect([start, end]);
     } else {
-      // Third click - reset and set new start date
       setSelectionStart(dateString);
       setSelectionEnd(null);
       setError('');
@@ -254,8 +250,8 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     }
   }, [selectedRange]);
 
-  // Function to handle search button click
-  const handleSearch = (stopoverInfo = null, preserveCalendarData = false, clearSelections = false) => {
+  // Update the handleSearch function to also set the calendar month
+  const handleSearch = (stopoverInfo, preserveCalendarData = false, clearSelections = false) => {
     if (!selectionStart || !selectionEnd) {
       setError('Please select a date range');
       return;
@@ -268,16 +264,27 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     
     setError('');
     
+    // Set the calendar to the first selected date
+    setCalendarToDate(selectionStart);
+    
     // Create stopover info object if a connection is selected
     const stopoverInfoObj = selectedConnection ? {
       airport: selectedConnection,
       days: stopoverDays
-    } : stopoverInfo;
+    } : null;
     
-    // Call the onSearch function with the date range and stopover info
+    console.log('Search with date range:', {
+      start: selectionStart,
+      end: selectionEnd,
+      stopover: stopoverInfoObj
+    });
+    
+    // Pass the selected date range to the parent component
+    onDateRangeSelect([selectionStart, selectionEnd]);
+    
+    // Call the search function with stopover info and clear selections flag
     if (onSearch) {
-      console.log("Calling onSearch with:", [selectionStart, selectionEnd], stopoverInfoObj);
-      onSearch([selectionStart, selectionEnd], stopoverInfoObj, preserveCalendarData, clearSelections);
+      onSearch(stopoverInfoObj, true, true); // Add flag to clear flight selections
     }
   };
 
@@ -480,7 +487,6 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
             display: 'flex',
             justifyContent: 'flex-start',
             alignItems: 'center',
-            flexWrap: 'wrap',
             gap: '8px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -516,18 +522,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
               <Button
                 type="primary"
-                onClick={() => {
-                  console.log("FlightAvailabilityCalendar Search button clicked");
-                  
-                  // Create stopover info if needed
-                  const stopoverInfo = selectedConnection ? {
-                    airport: selectedConnection,
-                    days: stopoverDays
-                  } : null;
-                  
-                  // Call the handleSearch function with the stopover info
-                  handleSearch(stopoverInfo);
-                }}
+                onClick={() => handleSearch(null)}
                 disabled={!selectionStart || !selectionEnd || (selectedConnection && !stopoverDays)}
               >
                 Search

@@ -28,7 +28,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
     isLoadingAvailability,
     setStartDate,
     startDate,
-  } = useFlightDetails(() => getSegmentColumns(startDay), startDay);
+  } = useFlightDetails(getSegmentColumns, startDay);
 
   // Add pagination state with sorting
   const [paginationState, setPaginationState] = useState({});
@@ -39,9 +39,6 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
     showSizeChanger: true,
     pageSizeOptions: ['5', '10', '20', '50'],
   };
-
-  // Add state to control calendar visibility
-  const [showCalendar, setShowCalendar] = useState(false);
 
   // Function to handle pagination change
   const handlePaginationChange = (segmentIndex, page, pageSize) => {
@@ -70,7 +67,6 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
       setDateRangeError(false);
       setSelectedDates(null);
       setApiKey('');
-      setShowCalendar(false);
     }
   }, [isVisible]);
 
@@ -87,14 +83,16 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
     setDateRangeError(false);
   };
 
-  // Update the handleCalendarSearch function
-  const handleCalendarSearchClick = () => {
-    // Show the calendar component
-    setShowCalendar(true);
+  const handleCalendarSearchClick = (stopoverInfo, preserveCalendarData = false, clearSelections = false) => {
+    if (!selectedDates) {
+      setDateRangeError(true);
+      return;
+    }
     
-    // Call the original calendar search function with the current route
-    console.log('Apply button clicked - calling handleCalendarSearch with route:', currentRoute);
-    handleCalendarSearch(currentRoute);
+    setDateRangeError(false);
+    
+    // Pass the clearSelections flag to handleDateSearch
+    handleDateSearch(currentRoute, stopoverInfo, preserveCalendarData, clearSelections);
   };
 
   // Function to group flights by segment with safety checks
@@ -276,7 +274,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
           maxWidth: '100%'
         },
         wrapper: {
-          top: '16px'
+          top: '-80px' // Position the modal 16px from the top
         }
       }}
     >
@@ -317,7 +315,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
             <Button
               type="primary"
               disabled={!apiKey || !apiKey.toLowerCase().startsWith('pro')}
-              onClick={handleCalendarSearchClick}
+              onClick={() => handleCalendarSearch(currentRoute)}
             >
               Apply
             </Button>
@@ -325,17 +323,13 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
         </div>
       </div>
 
-      {/* Only show the calendar if showCalendar is true */}
-      {showCalendar && (
-        <FlightAvailabilityCalendar 
-          flightData={availabilityData}
-          currentRoute={currentRoute}
-          onDateRangeSelect={handleCalendarDateSelect}
-          selectedRange={selectedDates}
-          onSearch={handleCalendarSearch}
-          pricingData={pricingData}
-        />
-      )}
+      <FlightAvailabilityCalendar 
+        flightData={availabilityData}
+        currentRoute={currentRoute}
+        onDateRangeSelect={handleCalendarDateSelect}
+        selectedRange={selectedDates}
+        onSearch={handleCalendarSearchClick}
+      />
 
       {isLoadingSegments ? (
         <div style={{ textAlign: 'center', margin: '20px 0' }}>
