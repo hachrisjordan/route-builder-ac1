@@ -155,7 +155,7 @@ const airports = [
         "Country":"United States",
         "Latitude":41.33847,
         "Longitude":-75.723297,
-        "Name":"Avoca Wilkes-Barre\/Scranton International Airport",
+        "Name":"Avoca Wilkes-Barre/Scranton International Airport",
         "IATA":"AVP",
         "Zone":"North America"
     },

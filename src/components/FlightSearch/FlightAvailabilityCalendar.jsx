@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Button, Card, Typography, Badge, Select, InputNumber } from 'antd';
+import React, { useState, useEffect, useRef } from 'react';
+import { Button, Typography, Select, InputNumber } from 'antd';
 import dayjs from 'dayjs';
 import { airports } from './data/airports';
 import FlightDetailsModal from './FlightDetailsModal';
@@ -7,35 +7,115 @@ import FlightDetailsModal from './FlightDetailsModal';
 const { Title } = Typography;
 
 const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelect, selectedRange, onSearch, selectedFlights, pricingData }) => {
+  // State initialization
   const [currentMonth, setCurrentMonth] = useState(dayjs().month());
   const [currentYear, setCurrentYear] = useState(dayjs().year());
-  const [selectionStart, setSelectionStart] = useState(null);
-  const [selectionEnd, setSelectionEnd] = useState(null);
+  // Create a local state for selections that won't be reset by props changes
+  const [localSelectionStart, setLocalSelectionStart] = useState(null);
+  const [localSelectionEnd, setLocalSelectionEnd] = useState(null);
   const [error, setError] = useState('');
-  const [showCalendar, setShowCalendar] = useState(false);
+  // Hard-code showCalendar to true to prevent infinite loops
+  const showCalendar = true;
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [stopoverDays, setStopoverDays] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Get days in month
-  const getDaysInMonth = (year, month) => {
-    return dayjs(`${year}-${month + 1}`).daysInMonth();
+  
+  // Create derived values for selection that can be used in the component
+  // This ensures local state takes precedence but will fall back to props if local state is null
+  const selectionStart = localSelectionStart;
+  const selectionEnd = localSelectionEnd;
+  
+  // Track selection changes with a ref to prevent race conditions
+  const selectionRef = useRef({ start: null, end: null });
+  
+  // Set up display control functions
+  const hideCalendarFn = () => {
+    // We want to reset selections but not actually hide the calendar
+    setLocalSelectionStart(null);
+    setLocalSelectionEnd(null);
+    setError('');
+    
+    // Reset the ref so the calendar can be shown again if needed
+    if (calendarShownRef) {
+      calendarShownRef.current = false;
+    }
+    
+    // Also reset the selection ref
+    selectionRef.current = { start: null, end: null };
+  };
+  
+  const clearStopoverInfo = () => {
+    // Clear stopover information
+    setSelectedConnection(null);
+    setStopoverDays(null);
+    
+    // Also clear date selections
+    setLocalSelectionStart(null);
+    setLocalSelectionEnd(null);
+    
+    // Reset the selection ref
+    if (selectionRef && selectionRef.current) {
+      selectionRef.current = { start: null, end: null };
+    }
+    
+    // Clear error message
+    setError('');
+    
+    console.log("All selections cleared");
   };
 
-  // Get first day of month (0 = Sunday, 1 = Monday, etc.)
-  const getFirstDayOfMonth = (year, month) => {
-    return dayjs(`${year}-${month + 1}-01`).day();
+  // Use a ref to prevent infinite loops from repeated function calls
+  const calendarShownRef = useRef(false);
+  
+  // DISABLE ALL USEEFFECTS TO STOP LOOPS
+  /*
+  useEffect(() => {
+    window.showCalendar = () => {
+      console.log("Window showCalendar called");
+      if (!calendarShownRef.current) {
+        calendarShownRef.current = true;
+        setShowCalendar(true);
+        console.log("Calendar visibility set to true");
+      }
+    };
+    
+    window.hideCalendar = hideCalendarFn;
+    window.clearStopoverInfo = clearStopoverInfo;
+    
+    setShowCalendar(true);
+    
+    return () => {
+      delete window.showCalendar;
+      delete window.hideCalendar;
+      delete window.clearStopoverInfo;
+    };
+  }, []);
+  */
+  
+  // Set up the window functions directly without useEffect
+  window.showCalendar = () => {
+    const calendarContainer = document.querySelector(".calendar-container");
+    if (calendarContainer) {
+      calendarContainer.style.display = "block";
+    }
+    console.log("Calendar shown via DOM manipulation");
   };
-
-  // Helper to format date as "YYYY-MM-DD"
-  const formatDate = (year, month, day) => {
-    return dayjs(`${year}-${month + 1}-${day}`).format('YYYY-MM-DD');
+  
+  window.hideCalendar = () => {
+    const calendarContainer = document.querySelector(".calendar-container");
+    if (calendarContainer) {
+      calendarContainer.style.display = "none";
+    }
+    console.log("Calendar hidden via DOM manipulation");
   };
+  
+  // This one needs to actually work to clear selections when the modal closes
+  window.clearStopoverInfo = clearStopoverInfo;
+  
+  // REMOVING THIS ENTIRE EFFECT TO STOP INFINITE LOOP
+  // We'll manually initialize selections when needed
 
-  const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-  const firstDayOfMonth = getFirstDayOfMonth(currentYear, currentMonth);
-
-  // Previous and next month handlers
+  // Calendar navigation functions
   const goToPrevMonth = () => {
     if (currentMonth === 0) {
       setCurrentMonth(11);
@@ -54,13 +134,195 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     }
   };
 
-  const monthNames = ["January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"];
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  // Calendar utility functions
+  const getDaysInMonth = (year, month) => {
+    return dayjs(`${year}-${month + 1}`).daysInMonth();
+  };
 
-  // Function to render availability badges
+  const getFirstDayOfMonth = (year, month) => {
+    return dayjs(`${year}-${month + 1}-01`).day();
+  };
+
+  const formatDate = (year, month, day) => {
+    return dayjs(`${year}-${month + 1}-${day}`).format('YYYY-MM-DD');
+  };
+
+  // Date selection handling with stable state
+  const handleDateClick = (dateString) => {
+    console.log("Date clicked:", dateString);
+    console.log("Current selection:", { 
+      start: selectionRef.current.start, 
+      end: selectionRef.current.end 
+    });
+    
+    if (!selectionRef.current.start) {
+      console.log("Setting selection start");
+      // Update both the ref and state
+      selectionRef.current.start = dateString;
+      selectionRef.current.end = null;
+      
+      setLocalSelectionStart(dateString);
+      setLocalSelectionEnd(null);
+      setError('');
+    } else if (!selectionRef.current.end) {
+      console.log("Setting selection end");
+      const start = dayjs(selectionRef.current.start);
+      const end = dayjs(dateString);
+      
+      if (end.isBefore(start)) {
+        setError('End date cannot be before start date');
+        return;
+      }
+      
+      if (end.diff(start, 'days') > 7) {
+        setError('Date range cannot exceed 7 days');
+        return;
+      }
+
+      // Update both the ref and state
+      selectionRef.current.end = dateString;
+      setLocalSelectionEnd(dateString);
+      
+      if (onDateRangeSelect) {
+        onDateRangeSelect([start, end]);
+      }
+    } else {
+      console.log("Resetting selection");
+      // Update both the ref and state
+      selectionRef.current.start = dateString;
+      selectionRef.current.end = null;
+      
+      setLocalSelectionStart(dateString);
+      setLocalSelectionEnd(null);
+      setError('');
+    }
+  };
+
+  const isDateInRange = (dateString) => {
+    const ref = selectionRef.current;
+    
+    if (!ref.start || !ref.end) {
+      // If only start date is selected, highlight just that day
+      if (ref.start && dateString === ref.start) {
+        return true;
+      }
+      return false;
+    }
+    
+    const date = dayjs(dateString);
+    const start = dayjs(ref.start);
+    const end = dayjs(ref.end);
+    
+    // Include the start and end dates themselves
+    return (date.isAfter(start.subtract(1, 'day')) || date.isSame(start, 'day')) && 
+           (date.isBefore(end.add(1, 'day')) || date.isSame(end, 'day'));
+  };
+
+  // Search function using ref for stable state
+  const handleSearch = (stopoverInfo) => {
+    const ref = selectionRef.current;
+    
+    if (!ref.start || !ref.end) {
+      setError('Please select a date range');
+      return;
+    }
+    
+    if (selectedConnection && !stopoverDays) {
+      setError('Please specify stopover days');
+      return;
+    }
+    
+    setError('');
+    
+    // Create stopover info object if a connection is selected
+    const stopoverInfoObj = selectedConnection ? {
+      airport: selectedConnection,
+      days: stopoverDays
+    } : null;
+    
+    console.log('Search with date range:', {
+      start: ref.start,
+      end: ref.end,
+      stopover: stopoverInfoObj
+    });
+    
+    // Pass the selected date range to the parent component
+    if (onDateRangeSelect) {
+      onDateRangeSelect([ref.start, ref.end]);
+    }
+    
+    // Call the search function with stopover info
+    if (onSearch) {
+      onSearch(stopoverInfoObj, true, true);
+    }
+  };
+
+  // Calendar segments rendering logic
+  const sortSegments = (segments) => {
+    const validSegments = segments
+      .map(segment => ({
+        ...segment,
+        ...isValidSegment(segment)
+      }))
+      .filter(segment => segment.isValid);
+
+    return getRequiredSegments(validSegments);
+  };
+  
+  const isValidSegment = (segment) => {
+    const [from, to] = segment.route.split('-');
+    
+    for (let i = 0; i < currentRoute.length - 1; i++) {
+      if (currentRoute[i] === from && currentRoute[i + 1] === to) {
+        return { isValid: true, index: i };
+      }
+    }
+    return { isValid: false, index: -1 };
+  };
+  
+  const getRequiredSegments = (existingSegments) => {
+    const segmentMap = new Map(
+      existingSegments.map(segment => [segment.route, segment])
+    );
+
+    const allSegments = [];
+    for (let i = 0; i < currentRoute.length - 1; i++) {
+      const route = `${currentRoute[i]}-${currentRoute[i + 1]}`;
+      const segment = segmentMap.get(route) || {
+        route,
+        classes: { Y: false, J: false, F: false },
+        index: i
+      };
+      allSegments.push(segment);
+    }
+
+    return allSegments.sort((a, b) => a.index - b.index);
+  };
+  
+  const hasAnyAvailability = (segments) => {
+    return segments.some(segment => 
+      segment.classes.Y || segment.classes.J || segment.classes.F
+    );
+  };
+
+  // Get unique connection points from currentRoute with full airport names
+  const connectionOptions = currentRoute
+    .slice(1, -1)
+    .map(iata => {
+      const airport = airports.find(a => a.IATA === iata);
+      return {
+        label: airport ? `${airport.IATA} - ${airport.Name}` : iata,
+        value: iata
+      };
+    });
+
+  // Handle modal close
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+  };
+
+  // Render availability badges
   const renderAvailabilityBadges = (route, classes) => {
-    // Helper function to get background color based on class code
     const getBackgroundColor = (classCode, available) => {
       if (!available) return 'transparent';
       switch (classCode) {
@@ -94,262 +356,36 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
     );
   };
 
-  // Function to check if a segment is valid for the current route
-  const isValidSegment = (segment) => {
-    const [from, to] = segment.route.split('-');
-    
-    // Check if this segment exists as consecutive airports in currentRoute
-    for (let i = 0; i < currentRoute.length - 1; i++) {
-      if (currentRoute[i] === from && currentRoute[i + 1] === to) {
-        return { isValid: true, index: i };
-      }
-    }
-    return { isValid: false, index: -1 };
-  };
-
-  // Function to get all required segments for a date
-  const getRequiredSegments = (existingSegments) => {
-    // Create a map of existing segments for easy lookup
-    const segmentMap = new Map(
-      existingSegments.map(segment => [segment.route, segment])
-    );
-
-    // Generate all required segments
-    const allSegments = [];
-    for (let i = 0; i < currentRoute.length - 1; i++) {
-      const route = `${currentRoute[i]}-${currentRoute[i + 1]}`;
-      const segment = segmentMap.get(route) || {
-        route,
-        classes: { Y: false, J: false, F: false }, // Default to all unavailable
-        index: i
-      };
-      allSegments.push(segment);
-    }
-
-    return allSegments.sort((a, b) => a.index - b.index);
-  };
-
-  // Function to sort segments by their position in the route
-  const sortSegments = (segments) => {
-    const validSegments = segments
-      .map(segment => ({
-        ...segment,
-        ...isValidSegment(segment)
-      }))
-      .filter(segment => segment.isValid);
-
-    return getRequiredSegments(validSegments);
-  };
-
-  // Add function to check if any segment has availability
-  const hasAnyAvailability = (segments) => {
-    return segments.some(segment => 
-      segment.classes.Y || segment.classes.J || segment.classes.F
-    );
-  };
-
-  const handleDateClick = (dateString) => {
-    if (!selectionStart) {
-      setSelectionStart(dateString);
-      setSelectionEnd(null);
-      setError('');
-    } else if (!selectionEnd) {
-      const start = dayjs(selectionStart);
-      const end = dayjs(dateString);
-      
-      if (end.isBefore(start)) {
-        setError('End date cannot be before start date');
-        return;
-      }
-      
-      if (end.diff(start, 'days') > 7) {
-        setError('Date range cannot exceed 7 days');
-        return;
-      }
-
-      setSelectionEnd(dateString);
-      onDateRangeSelect([start, end]);
-    } else {
-      setSelectionStart(dateString);
-      setSelectionEnd(null);
-      setError('');
-    }
-  };
-
-  const isDateInRange = (dateString) => {
-    if (!selectionStart || !selectionEnd) return false;
-    const date = dayjs(dateString);
-    const start = dayjs(selectionStart);
-    const end = dayjs(selectionEnd);
-    return date.isAfter(start.subtract(1, 'day')) && 
-           date.isBefore(end.add(1, 'day'));
-  };
-
-  // Add a function to handle the Apply button click
-  const handleApplyClick = (stopoverInfo, preserveCalendarData = false, clearSelections = false) => {
-    // Make sure the calendar is visible
-    setShowCalendar(true);
-    
-    // If there are selected dates, move to the month of the first selected date
-    if (selectedRange && selectedRange[0]) {
-      const selectedDate = dayjs.isDayjs(selectedRange[0]) 
-        ? selectedRange[0] 
-        : dayjs(selectedRange[0]);
-      
-      // Set the current month and year
-      setCurrentMonth(selectedDate.month());
-      setCurrentYear(selectedDate.year());
-      
-      console.log('Moving calendar to:', selectedDate.format('YYYY-MM-DD'));
-      console.log('Month:', selectedDate.month(), 'Year:', selectedDate.year());
-    }
-    
-    // Call the original onSearch function
-    onSearch(stopoverInfo, preserveCalendarData, clearSelections);
-  };
-
-  // Get unique connection points from currentRoute with full airport names
-  const connectionOptions = currentRoute
-    .slice(1, -1)
-    .map(iata => {
-      const airport = airports.find(a => a.IATA === iata);
-      return {
-        label: airport ? `${airport.IATA} - ${airport.Name}` : iata,
-        value: iata
-      };
-    });
-
-  // Add this function to directly set the calendar to a specific month/year
-  const setCalendarToDate = (date) => {
-    if (!date) return;
-    
-    // Ensure we have a dayjs object
-    const dayjsDate = dayjs.isDayjs(date) ? date : dayjs(date);
-    
-    // Log for debugging
-    console.log('Setting calendar to date:', dayjsDate.format('YYYY-MM-DD'));
-    console.log('Month:', dayjsDate.month(), 'Year:', dayjsDate.year());
-    
-    // Force update the calendar view
-    setCurrentMonth(dayjsDate.month());
-    setCurrentYear(dayjsDate.year());
-  };
-
-  // Update the useEffect to use our new function
-  useEffect(() => {
-    if (selectedRange && selectedRange[0]) {
-      const selectedDate = dayjs.isDayjs(selectedRange[0]) 
-        ? selectedRange[0] 
-        : dayjs(selectedRange[0]);
-      
-      setCurrentMonth(selectedDate.month());
-      setCurrentYear(selectedDate.year());
-      
-      // Make sure the calendar is visible
-      setShowCalendar(true);
-    }
-  }, [selectedRange]);
-
-  // Update the handleSearch function to also set the calendar month
-  const handleSearch = (stopoverInfo, preserveCalendarData = false, clearSelections = false) => {
-    if (!selectionStart || !selectionEnd) {
-      setError('Please select a date range');
-      return;
-    }
-    
-    if (selectedConnection && !stopoverDays) {
-      setError('Please specify stopover days');
-      return;
-    }
-    
-    setError('');
-    
-    // Set the calendar to the first selected date
-    setCalendarToDate(selectionStart);
-    
-    // Create stopover info object if a connection is selected
-    const stopoverInfoObj = selectedConnection ? {
-      airport: selectedConnection,
-      days: stopoverDays
-    } : null;
-    
-    console.log('Search with date range:', {
-      start: selectionStart,
-      end: selectionEnd,
-      stopover: stopoverInfoObj
-    });
-    
-    // Pass the selected date range to the parent component
-    onDateRangeSelect([selectionStart, selectionEnd]);
-    
-    // Call the search function with stopover info and clear selections flag
-    if (onSearch) {
-      onSearch(stopoverInfoObj, true, true); // Add flag to clear flight selections
-    }
-  };
-
-  // Add an effect to handle when the component receives new data
-  useEffect(() => {
-    if (flightData && flightData.length > 0) {
-      // Find the first date with data
-      const firstDateWithData = Object.keys(flightData[0]?.dates || {})
-        .sort()
-        .find(date => flightData[0].dates[date]?.length > 0);
-        
-      if (firstDateWithData) {
-        setCalendarToDate(firstDateWithData);
-      }
-    }
-  }, [flightData]);
-
-  // Clear function to reset stopover selections
-  const clearStopoverSelections = () => {
-    setSelectedConnection(null);
-    setStopoverDays(null);
-  };
-
-  // Handle modal close
-  const handleModalClose = () => {
-    setIsModalOpen(false);
-    clearStopoverSelections();
-  };
-
-  // Add a function to clear stopover information
-  const clearStopoverInfo = () => {
-    setSelectedConnection(null);
-    setStopoverDays(null);
-  };
-  
-  // Add a function to hide the calendar
-  const hideCalendar = () => {
-    setShowCalendar(false);
-    setSelectionStart(null);
-    setSelectionEnd(null);
-    setError('');
-  };
-  
-  // Expose the functions globally
-  useEffect(() => {
-    window.clearStopoverInfo = clearStopoverInfo;
-    window.hideCalendar = hideCalendar;
-    
-    // Cleanup on unmount
-    return () => {
-      delete window.clearStopoverInfo;
-      delete window.hideCalendar;
-    };
-  }, []);
+  // Calendar constants
+  const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+  const firstDayOfMonth = getFirstDayOfMonth(currentYear, currentMonth);
+  const monthNames = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return (
     <div>
-      {!showCalendar && (
-        <Button onClick={() => handleApplyClick()}>
+      {/* Show Calendar button - always visible */}
+      <div className="show-calendar-button" style={{ marginBottom: '10px' }}>
+        <Button
+          type="primary"
+          onClick={() => {
+            // Show calendar by modifying DOM directly
+            const calendarContainer = document.querySelector(".calendar-container");
+            
+            if (calendarContainer) {
+              calendarContainer.style.display = "block";
+            }
+            
+            console.log("Calendar shown via DOM manipulation");
+          }}
+        >
           Show Calendar
         </Button>
-      )}
+      </div>
       
-      {showCalendar && (
-        <div style={{ padding: '20px' }}>
+      {/* Calendar container with a class for DOM manipulation */}
+      <div className="calendar-container" style={{ padding: '20px' }}>
           {/* Calendar header */}
           <div style={{ 
             display: 'flex', 
@@ -395,7 +431,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
               </div>
             ))}
 
-            {/* Calendar cells */}
+            {/* Empty cells for days of week before the first day of month */}
             {Array.from({ length: firstDayOfMonth }).map((_, index) => (
               <div key={`empty-${index}`} style={{ 
                 backgroundColor: 'white',
@@ -404,15 +440,16 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
               }} />
             ))}
 
+            {/* Calendar day cells */}
             {Array.from({ length: daysInMonth }).map((_, index) => {
               const day = index + 1;
               const dateString = formatDate(currentYear, currentMonth, day);
-              const flights = flightData[dateString] || [];
+              const flights = flightData?.[dateString] || [];
               const validFlights = flights.length > 0 ? sortSegments(flights) : [];
               const showFlights = validFlights.length > 0 && hasAnyAvailability(validFlights);
               const isSelected = isDateInRange(dateString);
-              const isStart = dateString === selectionStart;
-              const isEnd = dateString === selectionEnd;
+              const isStart = dateString === selectionRef.current.start;
+              const isEnd = dateString === selectionRef.current.end;
 
               return (
                 <div
@@ -425,7 +462,13 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                     cursor: 'pointer',
                     border: isStart || isEnd ? '2px solid #1890ff' : 'none'
                   }}
-                  onClick={() => handleDateClick(dateString)}
+                  onClick={(e) => {
+                    // Prevent event bubbling
+                    e.stopPropagation();
+                    // Ensure click handler works properly
+                    console.log(`Clicking on day ${day} (${dateString})`);
+                    handleDateClick(dateString);
+                  }}
                 >
                   <div style={{ 
                     fontWeight: 'bold', 
@@ -472,6 +515,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
             })}
           </div>
 
+          {/* Error message */}
           {error && (
             <div style={{ 
               color: '#ff4d4f', 
@@ -482,6 +526,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
             </div>
           )}
 
+          {/* Controls */}
           <div style={{ 
             marginTop: '16px',
             display: 'flex',
@@ -528,14 +573,22 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                 Search
               </Button>
               <Button
-                onClick={() => setShowCalendar(false)}
+                onClick={() => {
+                  // Hide calendar by adding CSS class directly to avoid state changes
+                  const calendarContainer = document.querySelector(".calendar-container");
+                  
+                  if (calendarContainer) {
+                    calendarContainer.style.display = "none";
+                  }
+                  
+                  console.log("Calendar hidden via DOM manipulation");
+                }}
               >
                 Hide Calendar
               </Button>
             </div>
           </div>
         </div>
-      )}
 
       <FlightDetailsModal
         isModalOpen={isModalOpen}
@@ -544,8 +597,12 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
         pricingData={pricingData}
         currentRoute={currentRoute}
       />
+      
+      <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', color: '#888' }}>
+        Route Builder © Ha Nguyen @ 2025
+      </div>
     </div>
   );
 };
 
-export default FlightAvailabilityCalendar; 
+export default FlightAvailabilityCalendar;

@@ -12,7 +12,6 @@ const formatTimeWithDayDiff = (time, baseDate) => {
   const cleanTime = time.replace(/\s*\(\+\d+\)$/, '');
   
   if (!cleanTime || !baseDate) {
-    console.error('Missing required parameters:', { time: cleanTime, baseDate });
     return '--:--';
   }
 
@@ -28,18 +27,14 @@ const formatTimeWithDayDiff = (time, baseDate) => {
 };
 
 export const getSegmentColumns = (onFlightSelect, startDay) => {
-  // If no startDay provided, log error but continue with current date
+  // If no startDay provided, use current date
   if (!startDay) {
-    console.error('No startDay provided to getSegmentColumns');
     startDay = dayjs().startOf('day');
   }
 
   const baseDayjs = dayjs(startDay).startOf('day');
   
-  console.log('\ngetSegmentColumns using startDay:', {
-    startDay: baseDayjs.format('YYYY-MM-DD'),
-    isValid: baseDayjs.isValid()
-  });
+  // No logging startDay
 
   return [
     {

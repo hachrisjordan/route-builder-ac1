@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import dayjs from 'dayjs';
 import routeDetails from '../../../data/route_details.json';
 import airlines from '../../../data/airlines';
-import { getSegmentColumns } from '../segmentColumns';
 
 export default function useFlightDetails(getColumns, initialCombinations = []) {
   const [selectedDates, setSelectedDates] = useState(null);

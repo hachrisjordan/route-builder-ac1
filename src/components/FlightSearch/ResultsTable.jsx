@@ -53,9 +53,20 @@ const ResultsTable = ({
   const filteredData = getFilteredData();
   
   // Reset to first page when search text changes
+  // Using useRef to prevent infinite loops with the onTableChange callback
+  const previousSearchText = React.useRef(tableSearchText);
+  
   React.useEffect(() => {
-    if (onTableChange && pagination) {
-      onTableChange({ ...pagination, current: 1 }, null, null);
+    // Only trigger table change if the search text has actually changed
+    if (previousSearchText.current !== tableSearchText) {
+      previousSearchText.current = tableSearchText;
+      
+      if (onTableChange && pagination) {
+        // Use setTimeout to break the update cycle
+        setTimeout(() => {
+          onTableChange({ ...pagination, current: 1 }, null, null);
+        }, 0);
+      }
     }
   }, [tableSearchText]);
 
@@ -79,34 +90,48 @@ const ResultsTable = ({
         marginTop: 24
       }}
     >
-      <Table
-        dataSource={filteredData}
-        columns={getResultColumns(onRouteSelect)}
-        rowKey={(record, index) => index}
-        pagination={{
-          ...pagination,
-          showSizeChanger: true,
-          showTotal: (total, range) => {
-            // Ensure range doesn't exceed total
-            const adjustedEnd = Math.min(range[1], total);
-            const adjustedStart = total === 0 ? 0 : range[0];
-            return `${adjustedStart}-${adjustedEnd} of ${total} routes`;
-          },
-          pageSizeOptions: ['10', '25', '50', '100'],
-          defaultPageSize: 25,
-          total: filteredData.length,
-        }}
-        loading={isLoading}
-        onChange={onTableChange}
-        scroll={{ x: 1600 }}
-        showSorterTooltip={true}
-        sortDirections={['ascend', 'descend']}
-        style={{ width: '100%' }}
-      />
+      <div className="table-container" style={{ width: '100%', overflowX: 'auto', minWidth: '1600px' }}>
+        <Table
+          dataSource={filteredData}
+          columns={getResultColumns(onRouteSelect)}
+          rowKey={(record, index) => index}
+          pagination={{
+            ...pagination,
+            showSizeChanger: true,
+            showTotal: (total, range) => {
+              // Ensure range doesn't exceed total
+              const adjustedEnd = Math.min(range[1], total);
+              const adjustedStart = total === 0 ? 0 : range[0];
+              return `${adjustedStart}-${adjustedEnd} of ${total} routes`;
+            },
+            pageSizeOptions: ['10', '25', '50', '100'],
+            defaultPageSize: 25,
+            total: filteredData.length,
+          }}
+          loading={isLoading}
+          onChange={onTableChange}
+          scroll={{ x: 1600 }}
+          showSorterTooltip={true}
+          sortDirections={['ascend', 'descend']}
+          style={{ width: '100%' }}
+          locale={{
+            emptyText: (
+              <div style={{ padding: '16px 0', width: '100%' }}>
+                No results found
+              </div>
+            )
+          }}
+        />
+      </div>
 
       <style jsx>{`
+        .table-container {
+          display: block;
+          width: 100%;
+        }
         :global(.ant-table) {
           font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+          table-layout: fixed;
         }
         :global(.ant-card-body) {
           padding: 12px;
@@ -115,6 +140,19 @@ const ResultsTable = ({
         }
         :global(.ant-table-wrapper) {
           width: 100%;
+        }
+        :global(.ant-table-empty .ant-table-content) {
+          min-width: 1600px;
+        }
+        :global(.ant-table-placeholder) {
+          min-width: 1600px;
+        }
+        :global(.ant-empty-normal) {
+          margin: 32px 0;
+        }
+        :global(.ant-table-content) {
+          overflow-x: auto;
+          min-width: 1600px;
         }
       `}</style>
     </Card>
