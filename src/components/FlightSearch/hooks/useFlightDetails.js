@@ -80,6 +80,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         
         console.log(`\nChecking flight ${trip.FlightNumbers}:`);
         console.log(`  Carrier: ${trip.Carriers}`);
+        console.log(`  Cabin: ${trip.Cabin}`);
         console.log(`  Departs: ${departureTime.format('YYYY-MM-DD HH:mm')}`);
         console.log(`  Arrives: ${arrivalTime.format('YYYY-MM-DD HH:mm')}`);
         
@@ -95,6 +96,12 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
           return false;
         }
         
+        // Filter out 2-character FareClass values
+        if (trip.FareClass && trip.FareClass.length === 2) {
+          console.log('  ❌ Skipped: 2-character FareClass');
+          return false;
+        }
+        
         if (timeWindow) {
           const isValid = departureTime.isAfter(timeWindow.start) && 
                          departureTime.isBefore(timeWindow.end);
@@ -104,11 +111,13 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
             console.log(`    Must depart between ${timeWindow.start.format('YYYY-MM-DD HH:mm')} and ${timeWindow.end.format('YYYY-MM-DD HH:mm')}`);
           } else {
             console.log('  ✓ Accepted: Within time window');
+            console.log(`  ✓ Class: ${trip.Cabin}`);
           }
           return isValid;
         }
         
         console.log('  ✓ Accepted: No time window restrictions');
+        console.log(`  ✓ Class: ${trip.Cabin}`);
         return true;
       })
       .forEach(trip => {
@@ -128,6 +137,10 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
 
         // If flight already exists, merge cabin classes
         if (flights[flightNumber]) {
+          console.log(`\n  Merging cabin classes for flight ${flightNumber}:`);
+          console.log(`  Current classes: Y:${flights[flightNumber].economy}, J:${flights[flightNumber].business}, F:${flights[flightNumber].first}`);
+          console.log(`  Adding class: ${trip.Cabin}`);
+          
           switch(trip.Cabin.toLowerCase()) {
             case 'economy':
               flights[flightNumber].economy = true;
@@ -139,6 +152,8 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
               flights[flightNumber].first = true;
               break;
           }
+          
+          console.log(`  Updated classes: Y:${flights[flightNumber].economy}, J:${flights[flightNumber].business}, F:${flights[flightNumber].first}`);
           return; // Skip creating new flight entry
         }
 
@@ -147,6 +162,9 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         if (aircraftName && aircraftName === '787  All') {
           aircraftName = 'Boeing 787-10';
         }
+
+        console.log(`\n  Creating new flight entry for ${flightNumber}:`);
+        console.log(`  Initial cabin class: ${trip.Cabin}`);
 
         flights[flightNumber] = {
           from: trip.OriginAirport,
@@ -259,14 +277,46 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
       });
 
       // Continue with existing segment search logic
-      const segmentPromises = selectedSegments.map(segment => 
-        fetch(`https://backend-284998006367.us-central1.run.app/api/route_details/${segment.ID}`, {
-          headers: {
-            'accept': 'application/json',
-            'Partner-Authorization': apiKey
-          }
-        })
-      );
+      const segmentPromises = selectedSegments.map(segment => {
+        // Create a Set to store unique IDs to fetch
+        const idsToFetch = new Set();
+        
+        // Add the main segment ID
+        idsToFetch.add(segment.ID);
+        
+        // Add lastUpdate IDs if they exist and are different from the main ID
+        if (segment.lastYUpdate && segment.lastYUpdate !== segment.ID) {
+          idsToFetch.add(segment.lastYUpdate);
+        }
+        if (segment.lastJUpdate && segment.lastJUpdate !== segment.ID) {
+          idsToFetch.add(segment.lastJUpdate);
+        }
+        if (segment.lastFUpdate && segment.lastFUpdate !== segment.ID) {
+          idsToFetch.add(segment.lastFUpdate);
+        }
+
+        console.log(`\nFetching details for segment ${segment.route}:`, {
+          mainId: segment.ID,
+          lastYUpdate: segment.lastYUpdate,
+          lastJUpdate: segment.lastJUpdate,
+          lastFUpdate: segment.lastFUpdate,
+          totalIds: Array.from(idsToFetch)
+        });
+
+        // Return an array of promises for each ID
+        return Array.from(idsToFetch).map(id => 
+          fetch(`https://backend-284998006367.us-central1.run.app/api/seats/${id}`, {
+            headers: {
+              'accept': 'application/json',
+              'Partner-Authorization': apiKey,
+              'Segment-ID': id
+            }
+          })
+        );
+      });
+
+      // Flatten the array of arrays of promises
+      const allSegmentPromises = segmentPromises.flat();
 
       // Only fetch availability data if we're not preserving it
       if (!preserveCalendarData) {
@@ -295,22 +345,180 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
           
           // Process availability data into a more usable format
           const processedAvailability = {};
+          
+          // Group records by date and route
+          const groupedRecords = {};
           availabilityResult.forEach(item => {
-            const dateKey = item.date;
+            const key = `${item.date}_${item.originAirport}-${item.destinationAirport}`;
+            if (!groupedRecords[key]) {
+              groupedRecords[key] = [];
+            }
+            groupedRecords[key].push(item);
+          });
+
+          // Process each group of records
+          Object.values(groupedRecords).forEach(records => {
+            // Sort records by source priority: united -> velocity -> lufthansa -> aeroplan
+            const sourcePriority = { united: 0, velocity: 1, lufthansa: 2, aeroplan: 3 };
+            records.sort((a, b) => sourcePriority[a.source] - sourcePriority[b.source]);
+
+            // Initialize merged record from the first record
+            const mergedRecord = { ...records[0] };
+            const dateKey = mergedRecord.date;
+
+            // Initialize Direct flags as false
+            mergedRecord.YDirect = false;
+            mergedRecord.JDirect = false;
+            mergedRecord.FDirect = false;
+
+            // Process airline lists for each cabin class
+            const processAirlines = (airlineStr) => {
+              if (!airlineStr) return '';
+              return airlineStr.split(',').map(a => a.trim()).filter(Boolean).join(',');
+            };
+
+            // Filter airlines based on source and update Direct flags using OR operation
+            records.forEach(record => {
+              // Remove specific airlines based on source
+              if (record.source === 'lufthansa') {
+                record.YDirectAirlines = processAirlines(record.YDirectAirlines?.replace(/\bLH\b/g, ''));
+                record.JDirectAirlines = processAirlines(record.JDirectAirlines?.replace(/\bLH\b/g, ''));
+                record.FDirectAirlines = processAirlines(record.FDirectAirlines?.replace(/\bLH\b/g, ''));
+              } else if (record.source === 'united') {
+                record.YDirectAirlines = processAirlines(record.YDirectAirlines?.replace(/\bUA\b/g, ''));
+                record.JDirectAirlines = processAirlines(record.JDirectAirlines?.replace(/\bUA\b/g, ''));
+                record.FDirectAirlines = processAirlines(record.FDirectAirlines?.replace(/\bUA\b/g, ''));
+              }
+
+              // Update Direct flags based on remaining airlines
+              record.YDirect = !!record.YDirectAirlines;
+              record.JDirect = !!record.JDirectAirlines;
+              record.FDirect = !!record.FDirectAirlines;
+
+              // Update merged record's Direct flags using OR operation
+              mergedRecord.YDirect = mergedRecord.YDirect || record.YDirect;
+              mergedRecord.JDirect = mergedRecord.JDirect || record.JDirect;
+              mergedRecord.FDirect = mergedRecord.FDirect || record.FDirect;
+
+              console.log(`\nProcessed ${record.source} record:`, {
+                YDirectAirlines: record.YDirectAirlines,
+                JDirectAirlines: record.JDirectAirlines,
+                FDirectAirlines: record.FDirectAirlines,
+                YDirect: record.YDirect,
+                JDirect: record.JDirect,
+                FDirect: record.FDirect,
+                mergedYDirect: mergedRecord.YDirect,
+                mergedJDirect: mergedRecord.JDirect,
+                mergedFDirect: mergedRecord.FDirect
+              });
+            });
+
+            // Merge airlines across sources
+            const mergedAirlines = {
+              Y: new Set(),
+              J: new Set(),
+              F: new Set()
+            };
+
+            let lastYUpdate = null;
+            let lastJUpdate = null;
+            let lastFUpdate = null;
+
+            records.forEach(record => {
+              const addAirlines = (airlineStr, set) => {
+                if (airlineStr) {
+                  airlineStr.split(',').forEach(airline => {
+                    const trimmed = airline.trim();
+                    if (trimmed) {
+                      console.log(`Adding airline ${trimmed} to set (current size: ${set.size})`);
+                      set.add(trimmed);
+                    }
+                  });
+                }
+              };
+
+              if (record.YDirect && record.YDirectAirlines) {
+                const prevSize = mergedAirlines.Y.size;
+                console.log(`\nProcessing Y class from ${record.source}:`, {
+                  airlines: record.YDirectAirlines,
+                  currentSet: Array.from(mergedAirlines.Y)
+                });
+                addAirlines(record.YDirectAirlines, mergedAirlines.Y);
+                if (mergedAirlines.Y.size > prevSize) {
+                  console.log(`New Y airlines added, updating lastYUpdate to ${record.ID}`);
+                  lastYUpdate = record.ID;
+                }
+              }
+              if (record.JDirect && record.JDirectAirlines) {
+                const prevSize = mergedAirlines.J.size;
+                console.log(`\nProcessing J class from ${record.source}:`, {
+                  airlines: record.JDirectAirlines,
+                  currentSet: Array.from(mergedAirlines.J)
+                });
+                addAirlines(record.JDirectAirlines, mergedAirlines.J);
+                if (mergedAirlines.J.size > prevSize) {
+                  console.log(`New J airlines added, updating lastJUpdate to ${record.ID}`);
+                  lastJUpdate = record.ID;
+                }
+              }
+              if (record.FDirect && record.FDirectAirlines) {
+                const prevSize = mergedAirlines.F.size;
+                console.log(`\nProcessing F class from ${record.source}:`, {
+                  airlines: record.FDirectAirlines,
+                  currentSet: Array.from(mergedAirlines.F)
+                });
+                addAirlines(record.FDirectAirlines, mergedAirlines.F);
+                if (mergedAirlines.F.size > prevSize) {
+                  console.log(`New F airlines added, updating lastFUpdate to ${record.ID}`);
+                  lastFUpdate = record.ID;
+                }
+              }
+            });
+
+            // Update merged record
+            mergedRecord.YDirectAirlines = Array.from(mergedAirlines.Y).join(',');
+            mergedRecord.JDirectAirlines = Array.from(mergedAirlines.J).join(',');
+            mergedRecord.FDirectAirlines = Array.from(mergedAirlines.F).join(',');
+            mergedRecord.YDirect = mergedAirlines.Y.size > 0;
+            mergedRecord.JDirect = mergedAirlines.J.size > 0;
+            mergedRecord.FDirect = mergedAirlines.F.size > 0;
+            mergedRecord.lastYUpdate = lastYUpdate;
+            mergedRecord.lastJUpdate = lastJUpdate;
+            mergedRecord.lastFUpdate = lastFUpdate;
+
+            console.log('\nMerged record:', {
+              YDirectAirlines: mergedRecord.YDirectAirlines,
+              JDirectAirlines: mergedRecord.JDirectAirlines,
+              FDirectAirlines: mergedRecord.FDirectAirlines,
+              YDirect: mergedRecord.YDirect,
+              JDirect: mergedRecord.JDirect,
+              FDirect: mergedRecord.FDirect,
+              lastYUpdate,
+              lastJUpdate,
+              lastFUpdate
+            });
+
             if (!processedAvailability[dateKey]) {
               processedAvailability[dateKey] = [];
             }
             
             processedAvailability[dateKey].push({
-              route: `${item.originAirport}-${item.destinationAirport}`,
+              route: `${mergedRecord.originAirport}-${mergedRecord.destinationAirport}`,
               classes: {
-                Y: item.YDirect,
-                J: item.JDirect,
-                F: item.FDirect
+                Y: mergedRecord.YDirect,
+                J: mergedRecord.JDirect,
+                F: mergedRecord.FDirect
               },
-              ID: item.ID,
-              distance: item.distance,
-              date: item.date
+              ID: mergedRecord.ID,
+              lastYUpdate: mergedRecord.lastYUpdate,
+              lastJUpdate: mergedRecord.lastJUpdate,
+              lastFUpdate: mergedRecord.lastFUpdate,
+              distance: mergedRecord.distance,
+              date: mergedRecord.date,
+              Source: mergedRecord.source,
+              YDirectAirlines: mergedRecord.YDirectAirlines,
+              JDirectAirlines: mergedRecord.JDirectAirlines,
+              FDirectAirlines: mergedRecord.FDirectAirlines
             });
           });
           
@@ -433,27 +641,74 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
             }
 
             console.log(`\nFetching ${from}-${to} for ${date}:`);
-            console.log(`Segment ID: ${route.ID}`);
+            console.log(`Main Segment ID: ${route.ID}`);
+            console.log(`Additional IDs:`, {
+              Y: route.lastYUpdate,
+              J: route.lastJUpdate,
+              F: route.lastFUpdate
+            });
             
+            const idsToFetch = new Set([
+              route.ID,
+              route.lastYUpdate,
+              route.lastJUpdate,
+              route.lastFUpdate
+            ].filter(Boolean));
+
             try {
-              const response = await fetch(`https://backend-284998006367.us-central1.run.app/api/seats/${route.ID}`, {
-                method: 'GET',
-                headers: {
-                  'accept': 'application/json',
-                  'Partner-Authorization': apiKey,
-                  'Segment-ID': route.ID
-                }
-              });
+              const responses = await Promise.all(
+                Array.from(idsToFetch).map(id => 
+                  fetch(`https://backend-284998006367.us-central1.run.app/api/seats/${id}`, {
+                    method: 'GET',
+                    headers: {
+                      'accept': 'application/json',
+                      'Partner-Authorization': apiKey,
+                      'Segment-ID': id
+                    }
+                  })
+                )
+              );
 
-              if (!response.ok) {
-                console.log(`❌ Failed to fetch ${from}-${to} (ID: ${route.ID})`);
-                continue;
-              }
+              const validResponses = await Promise.all(
+                responses
+                  .filter(response => response.ok)
+                  .map(response => response.json())
+              );
 
-              const data = await response.json();
-              const processedFlights = processFlightData(data, timeWindow, i);
-              console.log(`✓ Found ${processedFlights.length} valid flights`);
-              allFlights.push(...processedFlights);
+              // Process each response and merge the results
+              const processedFlights = validResponses
+                .map(data => processFlightData(data, timeWindow, i))
+                .flat();
+
+              console.log('\nMerging duplicate flights:');
+              // Remove duplicates based on flight number and departure time while merging cabin classes
+              const uniqueFlights = Array.from(
+                new Map(
+                  processedFlights.map(flight => {
+                    const key = `${flight.flightNumber}_${flight.DepartsAt}`;
+                    const existingFlight = processedFlights.find(f => 
+                      `${f.flightNumber}_${f.DepartsAt}` === key && f !== flight
+                    );
+                    if (existingFlight) {
+                      console.log(`\n  Found duplicate flight: ${flight.flightNumber}`);
+                      console.log(`  Flight 1 classes: Y:${flight.economy}, J:${flight.business}, F:${flight.first}`);
+                      console.log(`  Flight 2 classes: Y:${existingFlight.economy}, J:${existingFlight.business}, F:${existingFlight.first}`);
+                      const mergedFlight = {
+                        ...flight,
+                        economy: flight.economy || existingFlight.economy,
+                        business: flight.business || existingFlight.business,
+                        first: flight.first || existingFlight.first
+                      };
+                      console.log(`  Merged classes: Y:${mergedFlight.economy}, J:${mergedFlight.business}, F:${mergedFlight.first}`);
+                      return [key, mergedFlight];
+                    }
+                    return [key, flight];
+                  })
+                ).values()
+              );
+
+              console.log(`\n✓ Found ${uniqueFlights.length} unique valid flights from ${idsToFetch.size} sources`);
+              allFlights.push(...uniqueFlights);
             } catch (error) {
               console.error(`Error processing ${from}-${to} for ${date}:`, error);
             }
@@ -488,7 +743,11 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
               segment.flights
                 .sort((a, b) => dayjs(a.DepartsAt).valueOf() - dayjs(b.DepartsAt).valueOf())
                 .forEach(flight => {
-                  console.log(`  ${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')} - ${dayjs(flight.ArrivesAt).format('MM-DD HH:mm')}) ${flight.aircraft}`);
+                  const classes = [];
+                  if (flight.economy) classes.push('Y');
+                  if (flight.business) classes.push('J');
+                  if (flight.first) classes.push('F');
+                  console.log(`  ${flight.flightNumber} (${dayjs(flight.DepartsAt).format('MM-DD HH:mm')} - ${dayjs(flight.ArrivesAt).format('MM-DD HH:mm')}) ${flight.aircraft} [${classes.join(',')}]`);
                 });
             } else {
               console.log(`\nSegment ${index} (${segment.route}): No flights found`);
@@ -702,22 +961,180 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         
         // Process availability data into a more usable format
         const processedAvailability = {};
+        
+        // Group records by date and route
+        const groupedRecords = {};
         availabilityResult.forEach(item => {
-          const dateKey = item.date;
+          const key = `${item.date}_${item.originAirport}-${item.destinationAirport}`;
+          if (!groupedRecords[key]) {
+            groupedRecords[key] = [];
+          }
+          groupedRecords[key].push(item);
+        });
+
+        // Process each group of records
+        Object.values(groupedRecords).forEach(records => {
+          // Sort records by source priority: united -> velocity -> lufthansa -> aeroplan
+          const sourcePriority = { united: 0, velocity: 1, lufthansa: 2, aeroplan: 3 };
+          records.sort((a, b) => sourcePriority[a.source] - sourcePriority[b.source]);
+
+          // Initialize merged record from the first record
+          const mergedRecord = { ...records[0] };
+          const dateKey = mergedRecord.date;
+
+          // Initialize Direct flags as false
+          mergedRecord.YDirect = false;
+          mergedRecord.JDirect = false;
+          mergedRecord.FDirect = false;
+
+          // Process airline lists for each cabin class
+          const processAirlines = (airlineStr) => {
+            if (!airlineStr) return '';
+            return airlineStr.split(',').map(a => a.trim()).filter(Boolean).join(',');
+          };
+
+          // Filter airlines based on source and update Direct flags using OR operation
+          records.forEach(record => {
+            // Remove specific airlines based on source
+            if (record.source === 'lufthansa') {
+              record.YDirectAirlines = processAirlines(record.YDirectAirlines?.replace(/\bLH\b/g, ''));
+              record.JDirectAirlines = processAirlines(record.JDirectAirlines?.replace(/\bLH\b/g, ''));
+              record.FDirectAirlines = processAirlines(record.FDirectAirlines?.replace(/\bLH\b/g, ''));
+            } else if (record.source === 'united') {
+              record.YDirectAirlines = processAirlines(record.YDirectAirlines?.replace(/\bUA\b/g, ''));
+              record.JDirectAirlines = processAirlines(record.JDirectAirlines?.replace(/\bUA\b/g, ''));
+              record.FDirectAirlines = processAirlines(record.FDirectAirlines?.replace(/\bUA\b/g, ''));
+            }
+
+            // Update Direct flags based on remaining airlines
+            record.YDirect = !!record.YDirectAirlines;
+            record.JDirect = !!record.JDirectAirlines;
+            record.FDirect = !!record.FDirectAirlines;
+
+            // Update merged record's Direct flags using OR operation
+            mergedRecord.YDirect = mergedRecord.YDirect || record.YDirect;
+            mergedRecord.JDirect = mergedRecord.JDirect || record.JDirect;
+            mergedRecord.FDirect = mergedRecord.FDirect || record.FDirect;
+
+            console.log(`\nProcessed ${record.source} record:`, {
+              YDirectAirlines: record.YDirectAirlines,
+              JDirectAirlines: record.JDirectAirlines,
+              FDirectAirlines: record.FDirectAirlines,
+              YDirect: record.YDirect,
+              JDirect: record.JDirect,
+              FDirect: record.FDirect,
+              mergedYDirect: mergedRecord.YDirect,
+              mergedJDirect: mergedRecord.JDirect,
+              mergedFDirect: mergedRecord.FDirect
+            });
+          });
+
+          // Merge airlines across sources
+          const mergedAirlines = {
+            Y: new Set(),
+            J: new Set(),
+            F: new Set()
+          };
+
+          let lastYUpdate = null;
+          let lastJUpdate = null;
+          let lastFUpdate = null;
+
+          records.forEach(record => {
+            const addAirlines = (airlineStr, set) => {
+              if (airlineStr) {
+                airlineStr.split(',').forEach(airline => {
+                  const trimmed = airline.trim();
+                  if (trimmed) {
+                    console.log(`Adding airline ${trimmed} to set (current size: ${set.size})`);
+                    set.add(trimmed);
+                  }
+                });
+              }
+            };
+
+            if (record.YDirect && record.YDirectAirlines) {
+              const prevSize = mergedAirlines.Y.size;
+              console.log(`\nProcessing Y class from ${record.source}:`, {
+                airlines: record.YDirectAirlines,
+                currentSet: Array.from(mergedAirlines.Y)
+              });
+              addAirlines(record.YDirectAirlines, mergedAirlines.Y);
+              if (mergedAirlines.Y.size > prevSize) {
+                console.log(`New Y airlines added, updating lastYUpdate to ${record.ID}`);
+                lastYUpdate = record.ID;
+              }
+            }
+            if (record.JDirect && record.JDirectAirlines) {
+              const prevSize = mergedAirlines.J.size;
+              console.log(`\nProcessing J class from ${record.source}:`, {
+                airlines: record.JDirectAirlines,
+                currentSet: Array.from(mergedAirlines.J)
+              });
+              addAirlines(record.JDirectAirlines, mergedAirlines.J);
+              if (mergedAirlines.J.size > prevSize) {
+                console.log(`New J airlines added, updating lastJUpdate to ${record.ID}`);
+                lastJUpdate = record.ID;
+              }
+            }
+            if (record.FDirect && record.FDirectAirlines) {
+              const prevSize = mergedAirlines.F.size;
+              console.log(`\nProcessing F class from ${record.source}:`, {
+                airlines: record.FDirectAirlines,
+                currentSet: Array.from(mergedAirlines.F)
+              });
+              addAirlines(record.FDirectAirlines, mergedAirlines.F);
+              if (mergedAirlines.F.size > prevSize) {
+                console.log(`New F airlines added, updating lastFUpdate to ${record.ID}`);
+                lastFUpdate = record.ID;
+              }
+            }
+          });
+
+          // Update merged record
+          mergedRecord.YDirectAirlines = Array.from(mergedAirlines.Y).join(',');
+          mergedRecord.JDirectAirlines = Array.from(mergedAirlines.J).join(',');
+          mergedRecord.FDirectAirlines = Array.from(mergedAirlines.F).join(',');
+          mergedRecord.YDirect = mergedAirlines.Y.size > 0;
+          mergedRecord.JDirect = mergedAirlines.J.size > 0;
+          mergedRecord.FDirect = mergedAirlines.F.size > 0;
+          mergedRecord.lastYUpdate = lastYUpdate;
+          mergedRecord.lastJUpdate = lastJUpdate;
+          mergedRecord.lastFUpdate = lastFUpdate;
+
+          console.log('\nMerged record:', {
+            YDirectAirlines: mergedRecord.YDirectAirlines,
+            JDirectAirlines: mergedRecord.JDirectAirlines,
+            FDirectAirlines: mergedRecord.FDirectAirlines,
+            YDirect: mergedRecord.YDirect,
+            JDirect: mergedRecord.JDirect,
+            FDirect: mergedRecord.FDirect,
+            lastYUpdate,
+            lastJUpdate,
+            lastFUpdate
+          });
+
           if (!processedAvailability[dateKey]) {
             processedAvailability[dateKey] = [];
           }
           
           processedAvailability[dateKey].push({
-            route: `${item.originAirport}-${item.destinationAirport}`,
+            route: `${mergedRecord.originAirport}-${mergedRecord.destinationAirport}`,
             classes: {
-              Y: item.YDirect,
-              J: item.JDirect,
-              F: item.FDirect
+              Y: mergedRecord.YDirect,
+              J: mergedRecord.JDirect,
+              F: mergedRecord.FDirect
             },
-            ID: item.ID,
-            distance: item.distance,
-            date: item.date
+            ID: mergedRecord.ID,
+            lastYUpdate: mergedRecord.lastYUpdate,
+            lastJUpdate: mergedRecord.lastJUpdate,
+            lastFUpdate: mergedRecord.lastFUpdate,
+            distance: mergedRecord.distance,
+            date: mergedRecord.date,
+            Source: mergedRecord.source,
+            YDirectAirlines: mergedRecord.YDirectAirlines,
+            JDirectAirlines: mergedRecord.JDirectAirlines,
+            FDirectAirlines: mergedRecord.FDirectAirlines
           });
         });
         

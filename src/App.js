@@ -37,7 +37,7 @@ function App() {
           </Routes>
         </Content>
         <Footer className="app-footer">
-          Route Builder ©2025 to Ha Nguyen @ 2025
+          Route Builder by Ha Nguyen @ 2025
         </Footer>
       </Layout>
     </Router>

@@ -599,7 +599,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
       />
       
       <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', color: '#888' }}>
-        Route Builder © Ha Nguyen @ 2025
+        Route Builder by Ha Nguyen @ 2025
       </div>
     </div>
   );
