@@ -1,70 +1,105 @@
-# Getting Started with Create React App
+# Flight Route Builder
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A modern web application for finding and planning flight routes with real-time availability checking. This tool helps users discover optimal flight combinations across multiple segments with support for stopovers and different cabin classes.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- **Interactive Calendar View**
+  - Visual display of flight availability across dates
+  - Color-coded indicators for different cabin classes (Economy, Business, First)
+  - Easy date range selection with validation
+  - Support for multi-segment routes
 
-### `npm start`
+- **Stopover Planning**
+  - Add stopovers at intermediate points
+  - Configure stopover duration (1-14 days)
+  - Automatic connection time validation
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **Cabin Class Support**
+  - Economy (Y)
+  - Business (J)
+  - First Class (F)
+  - Real-time availability checking
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- **Smart Flight Filtering**
+  - Direct flight detection
+  - Airline-specific fare class validation
+  - Price-based filtering for Aeroplan AC-only flights
+  - Automatic merging of duplicate flights
 
-### `npm test`
+- **Route Validation**
+  - Connection time validation (30 minutes to 24 hours)
+  - Stopover duration validation
+  - Multi-segment route compatibility checking
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Technical Stack
 
-### `npm run build`
+- React.js
+- Ant Design (UI components)
+- Day.js (Date handling)
+- Neo4j (Database)
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Setup
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+1. Clone the repository:
+```bash
+git clone [repository-url]
+cd route-builder-ac1
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+2. Install dependencies:
+```bash
+npm install
+```
 
-### `npm run eject`
+3. Set up environment variables:
+Create a `.env` file in the root directory with:
+```
+REACT_APP_API_KEY=your_api_key
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+4. Start the development server:
+```bash
+npm start
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Usage
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+1. Enter your API key in the application
+2. Select your route segments
+3. Use the calendar view to:
+   - Select date ranges
+   - View flight availability
+   - Add stopovers if needed
+4. Click "Search" to find valid flight combinations
+5. Select flights from the results to build your route
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## API Integration
 
-## Learn More
+The application integrates with a flight availability API that provides:
+- Real-time flight availability
+- Pricing information
+- Cabin class details
+- Direct flight information
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## Contributing
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-### Code Splitting
+## License
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-### Analyzing the Bundle Size
+## Author
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Ha Nguyen
 
-### Making a Progressive Web App
+## Acknowledgments
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- Ant Design for the UI components
+- Day.js for date handling
+- Neo4j for the database backend
