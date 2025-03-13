@@ -2,6 +2,11 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import dayjs from 'dayjs';
 import routeDetails from '../../../data/route_details.json';
 import airlines from '../../../data/airlines';
+import pricing from '../../../data/pricing.json';
+import airportsData from '../../../data/airports.json';
+
+// Convert airports data to array if it's not already
+const airports = Array.isArray(airportsData) ? airportsData : Object.values(airportsData);
 
 export default function useFlightDetails(getColumns, initialCombinations = []) {
   const [selectedDates, setSelectedDates] = useState(null);
@@ -61,9 +66,10 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
   const processFlightData = (data, timeWindow, segmentIndex) => {
     const flights = {};
     const baseDate = dayjs(data.results?.[0]?.data?.data?.[0]?.DepartsAt || new Date()).format('YYYY-MM-DD');
+    const source = data.results?.[0]?.source || data.results?.[0]?.data?.data?.[0]?.Source || 'unknown';
     
     const rawFlights = data.results?.[0]?.data?.data || [];
-    console.log(`\nProcessing ${rawFlights.length} raw flights:`);
+    console.log(`\nProcessing ${rawFlights.length} raw flights from ${source}:`);
     
     if (timeWindow) {
       console.log('Time Window:', {
@@ -81,6 +87,9 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         console.log(`\nChecking flight ${trip.FlightNumbers}:`);
         console.log(`  Carrier: ${trip.Carriers}`);
         console.log(`  Cabin: ${trip.Cabin}`);
+        const fareClass = trip.AvailabilitySegments?.[0]?.FareClass;
+        console.log(`  Fare Class: ${fareClass}`);
+        console.log(`  Source: ${trip.Source || source}`);
         console.log(`  Departs: ${departureTime.format('YYYY-MM-DD HH:mm')}`);
         console.log(`  Arrives: ${arrivalTime.format('YYYY-MM-DD HH:mm')}`);
         
@@ -96,8 +105,18 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
           return false;
         }
         
+        // Filter AC flights to only accept fare class X or I when fare class is present
+        if (trip.Carriers === 'AC' && fareClass) {
+          console.log(`  Checking AC fare class: ${fareClass}`);
+          if (fareClass !== 'X' && fareClass !== 'I') {
+            console.log(`  ❌ Skipped: AC flight with unsupported fare class ${fareClass} (only X and I allowed)`);
+            return false;
+          }
+          console.log(`  ✓ Accepted: AC flight with supported fare class ${fareClass}`);
+        }
+        
         // Filter out 2-character FareClass values
-        if (trip.FareClass && trip.FareClass.length === 2) {
+        if (fareClass && fareClass.length === 2) {
           console.log('  ❌ Skipped: 2-character FareClass');
           return false;
         }
@@ -186,7 +205,8 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
           first: false,
           isSelected: false,
           distance: parseInt(trip.Distance) || getSegmentDistance(trip.OriginAirport, trip.DestinationAirport),
-          segmentIndex: segmentIndex
+          segmentIndex: segmentIndex,
+          source: trip.Source || source
         };
         
         switch(trip.Cabin.toLowerCase()) {
@@ -306,13 +326,13 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         // Return an array of promises for each ID
         return Array.from(idsToFetch).map(id => 
           fetch(`https://backend-284998006367.us-central1.run.app/api/seats/${id}`, {
-            headers: {
-              'accept': 'application/json',
+          headers: {
+            'accept': 'application/json',
               'Partner-Authorization': apiKey,
               'Segment-ID': id
-            }
-          })
-        );
+          }
+        })
+      );
       });
 
       // Flatten the array of arrays of promises
@@ -388,6 +408,60 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
                 record.YDirectAirlines = processAirlines(record.YDirectAirlines?.replace(/\bUA\b/g, ''));
                 record.JDirectAirlines = processAirlines(record.JDirectAirlines?.replace(/\bUA\b/g, ''));
                 record.FDirectAirlines = processAirlines(record.FDirectAirlines?.replace(/\bUA\b/g, ''));
+              } else if (record.source === 'aeroplan') {
+                // Check if airlines list contains only AC
+                const isYOnlyAC = record.YDirectAirlines === 'AC';
+                const isJOnlyAC = record.JDirectAirlines === 'AC';
+                const isFOnlyAC = record.FDirectAirlines === 'AC';
+
+                if (isYOnlyAC || isJOnlyAC || isFOnlyAC) {
+                  // Get origin and destination zones
+                  const originAirport = airports.find(a => a.IATA === record.originAirport);
+                  const destAirport = airports.find(a => a.IATA === record.destinationAirport);
+                  
+                  if (originAirport && destAirport) {
+                    const fromZone = originAirport.Zone;
+                    const toZone = destAirport.Zone;
+                    const distance = record.distance;
+
+                    // Find matching price tier
+                    const priceTier = pricing.find(p => 
+                      p['From Region'] === fromZone &&
+                      p['To Region'] === toZone &&
+                      distance >= p['Min Distance'] &&
+                      distance <= p['Max Distance']
+                    );
+
+                    if (priceTier) {
+                      console.log(`\nChecking Aeroplan AC-only pricing for ${record.originAirport}-${record.destinationAirport}:`);
+                      console.log(`  Distance: ${distance} miles`);
+                      console.log(`  Zones: ${fromZone} -> ${toZone}`);
+                      console.log(`  Expected prices: Y:${priceTier.Economy}, J:${priceTier.Business}, F:${priceTier.First}`);
+                      console.log(`  Actual prices: Y:${record.YPrice}, J:${record.JPrice}, F:${record.FPrice}`);
+
+                      // Check and adjust Y class
+                      if (isYOnlyAC && record.YPrice > priceTier.Economy) {
+                        console.log(`  ❌ Y price too high (${record.YPrice} > ${priceTier.Economy}), removing AC`);
+                        record.YDirectAirlines = '';
+                        record.YDirect = false;
+                      }
+
+                      // Check and adjust J class
+                      if (isJOnlyAC && record.JPrice > priceTier.Business) {
+                        console.log(`  ❌ J price too high (${record.JPrice} > ${priceTier.Business}), removing AC`);
+                        record.JDirectAirlines = '';
+                        record.JDirect = false;
+                      }
+
+                      // Check and adjust F class
+                      if (isFOnlyAC && record.FPrice > priceTier.First) {
+                        console.log(`  ❌ F price too high (${record.FPrice} > ${priceTier.First}), removing AC`);
+                        record.FDirectAirlines = '';
+                        record.FDirect = false;
+                      }
+                    }
+                  }
+                }
               }
 
               // Update Direct flags based on remaining airlines
@@ -659,10 +733,10 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
               const responses = await Promise.all(
                 Array.from(idsToFetch).map(id => 
                   fetch(`https://backend-284998006367.us-central1.run.app/api/seats/${id}`, {
-                    method: 'GET',
-                    headers: {
-                      'accept': 'application/json',
-                      'Partner-Authorization': apiKey,
+                method: 'GET',
+                headers: {
+                  'accept': 'application/json',
+                  'Partner-Authorization': apiKey,
                       'Segment-ID': id
                     }
                   })
@@ -677,35 +751,48 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
 
               // Process each response and merge the results
               const processedFlights = validResponses
-                .map(data => processFlightData(data, timeWindow, i))
+                .map(data => {
+                  const source = data.results?.[0]?.source || 'unknown';
+                  console.log(`Processing response from source: ${source}`);
+                  return processFlightData(data, timeWindow, i);
+                })
                 .flat();
 
               console.log('\nMerging duplicate flights:');
-              // Remove duplicates based on flight number and departure time while merging cabin classes
-              const uniqueFlights = Array.from(
-                new Map(
-                  processedFlights.map(flight => {
-                    const key = `${flight.flightNumber}_${flight.DepartsAt}`;
-                    const existingFlight = processedFlights.find(f => 
-                      `${f.flightNumber}_${f.DepartsAt}` === key && f !== flight
-                    );
-                    if (existingFlight) {
-                      console.log(`\n  Found duplicate flight: ${flight.flightNumber}`);
-                      console.log(`  Flight 1 classes: Y:${flight.economy}, J:${flight.business}, F:${flight.first}`);
-                      console.log(`  Flight 2 classes: Y:${existingFlight.economy}, J:${existingFlight.business}, F:${existingFlight.first}`);
-                      const mergedFlight = {
-                        ...flight,
-                        economy: flight.economy || existingFlight.economy,
-                        business: flight.business || existingFlight.business,
-                        first: flight.first || existingFlight.first
-                      };
-                      console.log(`  Merged classes: Y:${mergedFlight.economy}, J:${mergedFlight.business}, F:${mergedFlight.first}`);
-                      return [key, mergedFlight];
-                    }
-                    return [key, flight];
-                  })
-                ).values()
-              );
+              // Group flights by flight number and departure time
+              const flightGroups = {};
+              processedFlights.forEach(flight => {
+                const key = `${flight.flightNumber}_${flight.DepartsAt}`;
+                if (!flightGroups[key]) {
+                  flightGroups[key] = [];
+                }
+                flightGroups[key].push(flight);
+              });
+
+              // Merge each group into a single flight
+              const uniqueFlights = Object.entries(flightGroups).map(([key, flights]) => {
+                if (flights.length === 1) {
+                  return flights[0];
+                }
+
+                // Log all flights in the group
+                console.log(`\n  Found ${flights.length} instances of flight: ${flights[0].flightNumber}`);
+                flights.forEach((flight, index) => {
+                  console.log(`  Flight ${index + 1} classes: Y:${flight.economy}, J:${flight.business}, F:${flight.first} (Source: ${flight.source})`);
+                });
+
+                // Merge all flights in the group
+                const mergedFlight = {
+                  ...flights[0],
+                  economy: flights.some(f => f.economy),
+                  business: flights.some(f => f.business),
+                  first: flights.some(f => f.first),
+                  source: [...new Set(flights.map(f => f.source))].sort().join(',')
+                };
+
+                console.log(`  Merged classes: Y:${mergedFlight.economy}, J:${mergedFlight.business}, F:${mergedFlight.first} (Sources: ${mergedFlight.source})`);
+                return mergedFlight;
+              });
 
               console.log(`\n✓ Found ${uniqueFlights.length} unique valid flights from ${idsToFetch.size} sources`);
               allFlights.push(...uniqueFlights);
@@ -1004,6 +1091,60 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
               record.YDirectAirlines = processAirlines(record.YDirectAirlines?.replace(/\bUA\b/g, ''));
               record.JDirectAirlines = processAirlines(record.JDirectAirlines?.replace(/\bUA\b/g, ''));
               record.FDirectAirlines = processAirlines(record.FDirectAirlines?.replace(/\bUA\b/g, ''));
+            } else if (record.source === 'aeroplan') {
+              // Check if airlines list contains only AC
+              const isYOnlyAC = record.YDirectAirlines === 'AC';
+              const isJOnlyAC = record.JDirectAirlines === 'AC';
+              const isFOnlyAC = record.FDirectAirlines === 'AC';
+
+              if (isYOnlyAC || isJOnlyAC || isFOnlyAC) {
+                // Get origin and destination zones
+                const originAirport = airports.find(a => a.IATA === record.originAirport);
+                const destAirport = airports.find(a => a.IATA === record.destinationAirport);
+                
+                if (originAirport && destAirport) {
+                  const fromZone = originAirport.Zone;
+                  const toZone = destAirport.Zone;
+                  const distance = record.distance;
+
+                  // Find matching price tier
+                  const priceTier = pricing.find(p => 
+                    p['From Region'] === fromZone &&
+                    p['To Region'] === toZone &&
+                    distance >= p['Min Distance'] &&
+                    distance <= p['Max Distance']
+                  );
+
+                  if (priceTier) {
+                    console.log(`\nChecking Aeroplan AC-only pricing for ${record.originAirport}-${record.destinationAirport}:`);
+                    console.log(`  Distance: ${distance} miles`);
+                    console.log(`  Zones: ${fromZone} -> ${toZone}`);
+                    console.log(`  Expected prices: Y:${priceTier.Economy}, J:${priceTier.Business}, F:${priceTier.First}`);
+                    console.log(`  Actual prices: Y:${record.YPrice}, J:${record.JPrice}, F:${record.FPrice}`);
+
+                    // Check and adjust Y class
+                    if (isYOnlyAC && record.YPrice > priceTier.Economy) {
+                      console.log(`  ❌ Y price too high (${record.YPrice} > ${priceTier.Economy}), removing AC`);
+                      record.YDirectAirlines = '';
+                      record.YDirect = false;
+                    }
+
+                    // Check and adjust J class
+                    if (isJOnlyAC && record.JPrice > priceTier.Business) {
+                      console.log(`  ❌ J price too high (${record.JPrice} > ${priceTier.Business}), removing AC`);
+                      record.JDirectAirlines = '';
+                      record.JDirect = false;
+                    }
+
+                    // Check and adjust F class
+                    if (isFOnlyAC && record.FPrice > priceTier.First) {
+                      console.log(`  ❌ F price too high (${record.FPrice} > ${priceTier.First}), removing AC`);
+                      record.FDirectAirlines = '';
+                      record.FDirect = false;
+                    }
+                  }
+                }
+              }
             }
 
             // Update Direct flags based on remaining airlines

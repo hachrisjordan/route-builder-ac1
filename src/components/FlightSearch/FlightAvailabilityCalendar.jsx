@@ -10,18 +10,15 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
   // State initialization
   const [currentMonth, setCurrentMonth] = useState(dayjs().month());
   const [currentYear, setCurrentYear] = useState(dayjs().year());
-  // Create a local state for selections that won't be reset by props changes
   const [localSelectionStart, setLocalSelectionStart] = useState(null);
   const [localSelectionEnd, setLocalSelectionEnd] = useState(null);
   const [error, setError] = useState('');
-  // Hard-code showCalendar to true to prevent infinite loops
-  const showCalendar = true;
+  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState(null);
   const [stopoverDays, setStopoverDays] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Create derived values for selection that can be used in the component
-  // This ensures local state takes precedence but will fall back to props if local state is null
   const selectionStart = localSelectionStart;
   const selectionEnd = localSelectionEnd;
   
@@ -30,59 +27,38 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
   
   // Set up display control functions
   const hideCalendarFn = () => {
-    // We want to reset selections but not actually hide the calendar
+    setIsCalendarVisible(false);
     setLocalSelectionStart(null);
     setLocalSelectionEnd(null);
     setError('');
-    
-    // Reset the ref so the calendar can be shown again if needed
-    if (calendarShownRef) {
-      calendarShownRef.current = false;
-    }
-    
-    // Also reset the selection ref
     selectionRef.current = { start: null, end: null };
   };
   
   const clearStopoverInfo = () => {
-    // Clear stopover information
     setSelectedConnection(null);
     setStopoverDays(null);
-    
-    // Also clear date selections
     setLocalSelectionStart(null);
     setLocalSelectionEnd(null);
-    
-    // Reset the selection ref
     if (selectionRef && selectionRef.current) {
       selectionRef.current = { start: null, end: null };
     }
-    
-    // Clear error message
     setError('');
-    
     console.log("All selections cleared");
   };
 
-  // Use a ref to prevent infinite loops from repeated function calls
-  const calendarShownRef = useRef(false);
-  
-  // DISABLE ALL USEEFFECTS TO STOP LOOPS
-  /*
+  // Set up the window functions
   useEffect(() => {
     window.showCalendar = () => {
-      console.log("Window showCalendar called");
-      if (!calendarShownRef.current) {
-        calendarShownRef.current = true;
-        setShowCalendar(true);
-        console.log("Calendar visibility set to true");
-      }
+      setIsCalendarVisible(true);
+      console.log("Calendar shown via state");
     };
     
-    window.hideCalendar = hideCalendarFn;
-    window.clearStopoverInfo = clearStopoverInfo;
+    window.hideCalendar = () => {
+      setIsCalendarVisible(false);
+      console.log("Calendar hidden via state");
+    };
     
-    setShowCalendar(true);
+    window.clearStopoverInfo = clearStopoverInfo;
     
     return () => {
       delete window.showCalendar;
@@ -90,30 +66,6 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
       delete window.clearStopoverInfo;
     };
   }, []);
-  */
-  
-  // Set up the window functions directly without useEffect
-  window.showCalendar = () => {
-    const calendarContainer = document.querySelector(".calendar-container");
-    if (calendarContainer) {
-      calendarContainer.style.display = "block";
-    }
-    console.log("Calendar shown via DOM manipulation");
-  };
-  
-  window.hideCalendar = () => {
-    const calendarContainer = document.querySelector(".calendar-container");
-    if (calendarContainer) {
-      calendarContainer.style.display = "none";
-    }
-    console.log("Calendar hidden via DOM manipulation");
-  };
-  
-  // This one needs to actually work to clear selections when the modal closes
-  window.clearStopoverInfo = clearStopoverInfo;
-  
-  // REMOVING THIS ENTIRE EFFECT TO STOP INFINITE LOOP
-  // We'll manually initialize selections when needed
 
   // Calendar navigation functions
   const goToPrevMonth = () => {
@@ -369,23 +321,15 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
       <div className="show-calendar-button" style={{ marginBottom: '10px' }}>
         <Button
           type="primary"
-          onClick={() => {
-            // Show calendar by modifying DOM directly
-            const calendarContainer = document.querySelector(".calendar-container");
-            
-            if (calendarContainer) {
-              calendarContainer.style.display = "block";
-            }
-            
-            console.log("Calendar shown via DOM manipulation");
-          }}
+          onClick={() => setIsCalendarVisible(true)}
         >
           Show Calendar
         </Button>
       </div>
       
-      {/* Calendar container with a class for DOM manipulation */}
-      <div className="calendar-container" style={{ padding: '20px' }}>
+      {/* Calendar container with conditional rendering */}
+      {isCalendarVisible && (
+        <div className="calendar-container" style={{ padding: '20px' }}>
           {/* Calendar header */}
           <div style={{ 
             display: 'flex', 
@@ -573,22 +517,14 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                 Search
               </Button>
               <Button
-                onClick={() => {
-                  // Hide calendar by adding CSS class directly to avoid state changes
-                  const calendarContainer = document.querySelector(".calendar-container");
-                  
-                  if (calendarContainer) {
-                    calendarContainer.style.display = "none";
-                  }
-                  
-                  console.log("Calendar hidden via DOM manipulation");
-                }}
+                onClick={() => setIsCalendarVisible(false)}
               >
                 Hide Calendar
               </Button>
             </div>
           </div>
         </div>
+      )}
 
       <FlightDetailsModal
         isModalOpen={isModalOpen}

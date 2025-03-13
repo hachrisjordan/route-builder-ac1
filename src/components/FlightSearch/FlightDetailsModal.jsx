@@ -23,6 +23,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
     columns,
     selectedFlights,
     availabilityData,
+    isLoadingAvailability,
   } = useFlightDetails(getSegmentColumns, startDay);
 
   // Add pagination state with sorting
@@ -290,7 +291,8 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
             {/* Calendar start date picker removed as requested */}
             <Button
               type="primary"
-              disabled={!apiKey || !apiKey.toLowerCase().startsWith('pro')}
+              disabled={!apiKey || !apiKey.toLowerCase().startsWith('pro') || isLoadingAvailability}
+              loading={isLoadingAvailability}
               onClick={() => {
                 // First fetch the data
                 handleCalendarSearch(currentRoute);
@@ -303,7 +305,7 @@ const FlightDetailsModal = ({ isVisible, currentRoute, onClose, startDay }) => {
                 }, 100);
               }}
             >
-              Apply
+              {isLoadingAvailability ? 'Loading...' : 'Apply'}
             </Button>
           </div>
         </div>
