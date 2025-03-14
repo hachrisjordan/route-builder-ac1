@@ -15,7 +15,7 @@ const airlines = [
   { value: 'WY', label: 'Oman Air (WY)' },
   { value: 'SQ', label: 'Singapore Airlines (SQ)' },
   { value: 'SA', label: 'South African Airways (SA)' },
-  { value: 'LX', label: 'Swiss International Air Lines (LX)' },
+  { value: 'LX', label: 'Swiss (LX)' },
   { value: 'TP', label: 'TAP Air Portugal (TP)' },
   { value: 'TG', label: 'Thai Airways (TG)' },
   { value: 'UA', label: 'United Airlines (UA)' },
@@ -29,6 +29,7 @@ const airlines = [
   { value: 'TK', label: 'Turkish Airlines (TK)' },
   { value: 'CX', label: 'Cathay Pacific (CX)' },
   { value: 'VA', label: 'Virgin Australia (VA)' },
+  { value: 'AD', label: 'Azul (AD)' },
 ]
 
 export default airlines;
