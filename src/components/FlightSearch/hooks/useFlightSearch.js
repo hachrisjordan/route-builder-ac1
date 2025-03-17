@@ -7,6 +7,8 @@ export default function useFlightSearch() {
     current: 1,
     pageSize: 25,
     total: 0,
+    sortField: null,
+    sortOrder: null
   });
   const [errors, setErrors] = useState({
     departure: false,
@@ -61,8 +63,19 @@ export default function useFlightSearch() {
     }
   };
 
-  const handleTableChange = (newPagination) => {
-    setPagination(newPagination);
+  const handleTableChange = (newPagination, filters, sorter) => {
+    console.log('handleTableChange called with:', { newPagination, filters, sorter });
+    setPagination(prev => {
+      const updated = {
+        ...prev,
+        current: newPagination.current,
+        pageSize: newPagination.pageSize,
+        sortField: sorter?.field || null,
+        sortOrder: sorter?.order || null
+      };
+      console.log('Updating pagination to:', updated);
+      return updated;
+    });
   };
 
   return {
