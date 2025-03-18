@@ -191,5 +191,4 @@ export const getSegmentColumns = () => [
     width: 80,
     sorter: (a, b) => a.to.localeCompare(b.to)
   },
-  // ... other segment columns remain the same as in the original file
 ]; 
