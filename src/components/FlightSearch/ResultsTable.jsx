@@ -28,6 +28,9 @@ const ResultsTable = ({
   const [fMinSegmentPercent, setFMinSegmentPercent] = useState(0);
   const [airportSearchText, setAirportSearchText] = useState('');
   const previousDays = React.useRef(60);
+  const [otherFilters, setOtherFilters] = useState({
+    filterNonAvailability: false
+  });
 
   // Get unique airports from connections
   const uniqueAirports = React.useMemo(() => {
@@ -161,6 +164,37 @@ const ResultsTable = ({
         route.totalDistance <= distanceFilter[1]
       );
       console.log('After distance filter:', data.length, 'rows');
+    }
+
+    // Apply non-availability filter
+    if (otherFilters.filterNonAvailability) {
+      data = data.filter(route => {
+        const netField = selectedDays === 60 ? 'net' : `T${selectedDays}net`;
+        const yField = 'Y' + netField;
+        const jField = 'J' + netField;
+        const fField = 'F' + netField;
+
+        // Get all segments percentages for each cabin class
+        const getSegmentPercentages = (value) => {
+          if (!value) return [];
+          const matches = value.match(/-?\d+/g);
+          if (!matches) return [];
+          return matches.map(num => parseInt(num));
+        };
+
+        const ySegments = getSegmentPercentages(route[yField]);
+        const jSegments = getSegmentPercentages(route[jField]);
+        const fSegments = getSegmentPercentages(route[fField]);
+
+        // Check if any segment has all cabin classes at 0%
+        for (let i = 1; i < ySegments.length; i++) {  // Start from 1 to skip overall percentage
+          if (ySegments[i] === 0 && jSegments[i] === 0 && fSegments[i] === 0) {
+            return false;  // Filter out this route
+          }
+        }
+        return true;
+      });
+      console.log('After non-availability filter:', data.length, 'rows');
     }
 
     // Apply Y% filter
@@ -327,6 +361,41 @@ const ResultsTable = ({
       console.log('=== End Days Change Effect ===');
     }
   }, [selectedDays]);
+
+  // Add reset filters function
+  const resetAllFilters = () => {
+    setConnectionFilter({ mode: 'include', airports: [] });
+    setStopsFilter([]);
+    setDistanceFilter(null);
+    setYPercentFilter(null);
+    setJPercentFilter(null);
+    setFPercentFilter(null);
+    setYMinSegmentPercent(0);
+    setJMinSegmentPercent(0);
+    setFMinSegmentPercent(0);
+    setTableSearchText('');
+    setOtherFilters({ filterNonAvailability: false });
+  };
+
+  // Add effect to reset filters when searchResults changes
+  useEffect(() => {
+    resetAllFilters();
+  }, [searchResults]);
+
+  // Handle search text changes and reset filters
+  const handleSearchTextChange = (value) => {
+    setTableSearchText(value);
+    resetAllFilters();
+    
+    // Reset to first page while preserving sort
+    if (onTableChange && pagination) {
+      onTableChange(
+        { ...pagination, current: 1 },
+        pagination.filters,
+        { field: pagination.sortField, order: pagination.sortOrder }
+      );
+    }
+  };
 
   // Log table props before render
   console.log('=== Table Props ===');
@@ -652,6 +721,38 @@ const ResultsTable = ({
     );
   };
 
+  const renderOtherDropdown = () => {
+    return (
+      <div style={{ 
+        backgroundColor: 'white', 
+        boxShadow: '0 3px 6px -4px rgba(0,0,0,.12), 0 6px 16px 0 rgba(0,0,0,.08), 0 9px 28px 8px rgba(0,0,0,.05)',
+        borderRadius: '8px',
+        padding: '12px 16px',
+        width: '320px'
+      }}>
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Other Filters</span>
+            <Button 
+              type="link" 
+              size="small" 
+              onClick={() => setOtherFilters({ filterNonAvailability: false })}
+              style={{ padding: 0 }}
+            >
+              Reset
+            </Button>
+          </div>
+          <Checkbox
+            checked={otherFilters.filterNonAvailability}
+            onChange={e => setOtherFilters(prev => ({ ...prev, filterNonAvailability: e.target.checked }))}
+          >
+            Filter segments with no availability
+          </Checkbox>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Card 
       className="results-card" 
@@ -773,11 +874,27 @@ const ResultsTable = ({
                 F%
               </Button>
             </Dropdown>
+            <Dropdown 
+              dropdownRender={renderOtherDropdown}
+              trigger={['click']}
+              disabled={isDaysChanging}
+            >
+              <Button 
+                type={Object.values(otherFilters).some(v => v) ? "primary" : "default"}
+                size="small"
+                icon={<DownOutlined />}
+                style={{ 
+                  fontWeight: Object.values(otherFilters).some(v => v) ? 600 : 400
+                }}
+              >
+                Other
+              </Button>
+            </Dropdown>
           </div>
           <Input
             placeholder="Search routes..."
             value={tableSearchText}
-            onChange={e => setTableSearchText(e.target.value)}
+            onChange={e => handleSearchTextChange(e.target.value)}
             style={{ width: 200 }}
             allowClear
             disabled={isDaysChanging}
