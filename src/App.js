@@ -1,46 +1,127 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
-import { Layout, Menu } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
+import { Layout, Menu, Button, Drawer, Tooltip } from 'antd';
+import { AirplaneIcon, MenuIcon, HomeIcon, CloseIcon } from './components/Icons';
 import './App.css';
 import FlightSearch from './pages/FlightSearch';
 import NormalRouteBuilder from './pages/NormalRouteBuilder';
 
 const { Header, Content, Footer } = Layout;
 
+// Custom NavLink component that handles active state
+const NavLink = ({ to, children, icon, className }) => {
+  const location = useLocation();
+  const isActive = location.pathname === to;
+  
+  return (
+    <Link 
+      to={to} 
+      className={`nav-link ${isActive ? 'active' : ''} ${className || ''}`}
+    >
+      {icon && <span className="nav-icon">{icon}</span>}
+      <span className="nav-text">{children}</span>
+    </Link>
+  );
+};
+
+// Main app component
 function App() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  
+  // Handle scroll effect for header
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 10);
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
     <Router>
-      <Layout className="layout">
-        <Header className="app-header">
-          <div className="logo">Route Builder</div>
-          <Menu
-            theme="dark"
-            mode="horizontal"
-            defaultSelectedKeys={[window.location.pathname === '/normal' ? 'normal' : 'ac']}
-            items={[
-              {
-                key: 'ac',
-                label: <Link to="/ac">AC Route Builder</Link>,
-              },
-              {
-                key: 'normal',
-                label: <Link to="/normal">Normal Route Builder</Link>,
-              },
-            ]}
-          />
-        </Header>
-        <Content className="app-content">
-          <Routes>
-            <Route path="/ac" element={<FlightSearch />} />
-            <Route path="/normal" element={<NormalRouteBuilder />} />
-            <Route path="/" element={<Navigate to="/ac" replace />} />
-          </Routes>
-        </Content>
-        <Footer className="app-footer">
-          Route Builder by Ha Nguyen @ 2025
-        </Footer>
-      </Layout>
+      <AppContent 
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        scrolled={scrolled}
+      />
     </Router>
+  );
+}
+
+// Separate component to access useLocation hook inside Router context
+function AppContent({ mobileMenuOpen, setMobileMenuOpen, scrolled }) {
+  const location = useLocation();
+  
+  return (
+    <Layout className="layout">
+      <Header className={`app-header ${scrolled ? 'scrolled' : ''}`}>
+        <div className="header-container">
+          <div className="logo-container">
+            <AirplaneIcon className="logo-icon" />
+            <div className="logo">Route Builder</div>
+          </div>
+          
+          {/* Desktop Navigation */}
+          <nav className="desktop-nav">
+            <NavLink to="/ac" icon={<AirplaneIcon />}>AC Route Builder</NavLink>
+            <NavLink to="/normal" icon={<HomeIcon />}>Normal Route Builder</NavLink>
+          </nav>
+          
+          {/* Mobile menu button */}
+          <Button 
+            className="mobile-menu-button"
+            type="text"
+            icon={<MenuIcon />}
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Menu"
+          />
+        </div>
+      </Header>
+      
+      {/* Mobile Navigation Drawer */}
+      <Drawer
+        title={
+          <div className="drawer-header">
+            <AirplaneIcon className="drawer-logo-icon" />
+            <span>Route Builder</span>
+          </div>
+        }
+        placement="right"
+        onClose={() => setMobileMenuOpen(false)}
+        open={mobileMenuOpen}
+        width={280}
+        closeIcon={<CloseIcon />}
+        className="mobile-nav-drawer"
+        headerStyle={{ padding: '16px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}
+      >
+        <div className="mobile-nav">
+          <Link to="/ac" onClick={() => setMobileMenuOpen(false)}>
+            <AirplaneIcon /> AC Route Builder
+          </Link>
+          <Link to="/normal" onClick={() => setMobileMenuOpen(false)}>
+            <HomeIcon /> Normal Route Builder
+          </Link>
+        </div>
+      </Drawer>
+      
+      <Content className="app-content">
+        <Routes>
+          <Route path="/ac" element={<FlightSearch />} />
+          <Route path="/normal" element={<NormalRouteBuilder />} />
+          <Route path="/" element={<Navigate to="/ac" replace />} />
+        </Routes>
+      </Content>
+      
+      <Footer className="app-footer">
+        <div className="footer-content">
+          <div className="footer-copyright">
+            © 2025 Route Builder by Ha Nguyen
+          </div>
+        </div>
+      </Footer>
+    </Layout>
   );
 }
 

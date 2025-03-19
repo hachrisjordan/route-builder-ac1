@@ -906,7 +906,7 @@ const ResultsTable = ({
         marginTop: 24
       }}
     >
-      <div className="table-container" style={{ width: '100%', overflowX: 'auto', minWidth: '1600px' }}>
+      <div className="table-container" style={{ width: '100%', overflowX: 'auto' }}>
         <Table
           dataSource={filteredData}
           columns={getResultColumns(onRouteSelect, selectedDays, pagination.sortField, pagination.sortOrder)}
@@ -926,7 +926,7 @@ const ResultsTable = ({
           }}
           loading={isLoading || isDaysChanging}
           onChange={onTableChange}
-          scroll={{ x: 1600 }}
+          scroll={{ x: true }}
           showSorterTooltip={true}
           style={{ width: '100%' }}
           locale={{
@@ -946,10 +946,22 @@ const ResultsTable = ({
         .table-container {
           display: block;
           width: 100%;
+          overflow-x: auto;
         }
         :global(.ant-table) {
-          font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
-          table-layout: fixed;
+          max-width: 100%;
+        }
+        :global(.ant-table-container) {
+          width: 100%;
+        }
+        :global(.ant-table-content) {
+          overflow-x: auto;
+        }
+        :global(.ant-spin-nested-loading) {
+          overflow-x: auto;
+        }
+        :global(.ant-spin-container) {
+          overflow-x: auto;
         }
         :global(.ant-table-tbody > tr) {
           transition: all 0.3s ease-in-out;
@@ -980,17 +992,6 @@ const ResultsTable = ({
         }
         :global(.ant-empty-normal) {
           margin: 32px 0;
-        }
-        :global(.ant-table-content) {
-          overflow-x: auto;
-          min-width: 1600px;
-        }
-        :global(.ant-table-loading) {
-          opacity: 0.7;
-          transition: opacity 0.3s ease-in-out;
-        }
-        :global(.ant-spin-nested-loading) {
-          transition: opacity 0.3s ease-in-out;
         }
       `}</style>
     </Card>

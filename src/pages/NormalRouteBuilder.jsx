@@ -50,11 +50,12 @@ const NormalRouteBuilder = () => {
 
       <style jsx>{`
         .flight-search-container {
-          max-width: 1200px;
+          max-width: 1920px; /* Match our reference width */
           width: 100%;
           margin: 20px auto;
           padding: 0 12px;
           box-sizing: border-box;
+          overflow: visible;
         }
         :global(.ant-table-wrapper) {
           margin: 0;
@@ -64,6 +65,7 @@ const NormalRouteBuilder = () => {
         :global(.ant-card) {
           margin-bottom: 20px;
           width: 100%;
+          overflow: visible;
         }
         :global(.ant-modal) {
           max-width: 100vw;
@@ -72,6 +74,7 @@ const NormalRouteBuilder = () => {
         :global(.ant-modal-content) {
           max-height: 100vh;
           border-radius: 8px;
+          overflow: auto;
         }
         @media (max-width: 768px) {
           .flight-search-container {

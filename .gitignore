@@ -5,3 +5,5 @@
 !.elasticbeanstalk/*.global.yml
 .serverless/air-canada-route-builder.zip
 *.pack
+
+.env.local
