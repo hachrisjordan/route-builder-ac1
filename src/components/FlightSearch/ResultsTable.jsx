@@ -104,37 +104,50 @@ const ResultsTable = ({
 
     // Apply search filter if there's search text
     if (tableSearchText) {
-    const searchTerms = tableSearchText.toLowerCase().split(/\s+/).filter(term => term.length > 0);
-    
+      // Split search text into terms and filter out empty terms
+      const searchTerms = tableSearchText.toLowerCase().trim().split(/\s+/).filter(term => term.length > 0);
+      console.log('Search terms:', searchTerms);
+      
       data = data.filter(route => {
-      // If no search terms, include all routes
-      if (searchTerms.length === 0) return true;
-      
-      // For exact airport pair searches (e.g., "BLR DEL")
-      if (searchTerms.length === 2) {
-        const [term1, term2] = searchTerms;
+        // If no search terms, include all routes
+        if (searchTerms.length === 0) return true;
         
-        // Check if the search terms match the exact airport pair (in either order)
-        const exactMatch = 
-          (route.departure.toLowerCase() === term1 && route.arrival.toLowerCase() === term2) ||
-          (route.departure.toLowerCase() === term2 && route.arrival.toLowerCase() === term1);
+        // For exact airport pair searches (e.g., "BLR DEL")
+        if (searchTerms.length === 2) {
+          const [term1, term2] = searchTerms;
           
-        if (exactMatch) return true;
-      }
-      
-      // Fall back to the regular search if no exact match
-      return searchTerms.every(term => (
-        route.departure.toLowerCase().includes(term) ||
-        route.arrival.toLowerCase().includes(term) ||
-        route.connections.join(' ').toLowerCase().includes(term) ||
-        route.YPrice.toString().includes(term) ||
-        route.JPrice.toString().includes(term) ||
-        route.FPrice.toString().includes(term) ||
-        (route.Ynet || '').toLowerCase().includes(term) ||
-        (route.Jnet || '').toLowerCase().includes(term) ||
-        (route.Fnet || '').toLowerCase().includes(term)
-      ));
-    });
+          // Check if the search terms match the exact airport pair (in either order)
+          const exactMatch = 
+            (route.departure.toLowerCase() === term1 && route.arrival.toLowerCase() === term2) ||
+            (route.departure.toLowerCase() === term2 && route.arrival.toLowerCase() === term1);
+            
+          if (exactMatch) return true;
+        }
+        
+        // Include connections as a string for easier searching
+        const connectionsString = route.connections.join(' ').toLowerCase();
+        
+        // Convert all values to strings to avoid potential type issues
+        const yNetString = String(route.Ynet || '').toLowerCase();
+        const jNetString = String(route.Jnet || '').toLowerCase();
+        const fNetString = String(route.Fnet || '').toLowerCase();
+        const yPriceString = String(route.YPrice || '').toLowerCase();
+        const jPriceString = String(route.JPrice || '').toLowerCase();
+        const fPriceString = String(route.FPrice || '').toLowerCase();
+        
+        // Fall back to the regular search if no exact match
+        return searchTerms.every(term => (
+          route.departure.toLowerCase().includes(term) ||
+          route.arrival.toLowerCase().includes(term) ||
+          connectionsString.includes(term) ||
+          yPriceString.includes(term) ||
+          jPriceString.includes(term) ||
+          fPriceString.includes(term) ||
+          yNetString.includes(term) ||
+          jNetString.includes(term) ||
+          fNetString.includes(term)
+        ));
+      });
       console.log('After search filter:', data.length, 'rows');
     }
 
@@ -384,16 +397,18 @@ const ResultsTable = ({
 
   // Handle search text changes and reset filters
   const handleSearchTextChange = (value) => {
+    // Update the search text state without resetting other filters
     setTableSearchText(value);
-    resetAllFilters();
     
-    // Reset to first page while preserving sort
+    // Reset to first page while preserving sort and existing filters
     if (onTableChange && pagination) {
-      onTableChange(
-        { ...pagination, current: 1 },
-        pagination.filters,
-        { field: pagination.sortField, order: pagination.sortOrder }
-      );
+      setTimeout(() => {
+        onTableChange(
+          { ...pagination, current: 1 },
+          pagination.filters,
+          { field: pagination.sortField, order: pagination.sortOrder }
+        );
+      }, 0);
     }
   };
 
@@ -899,9 +914,16 @@ const ResultsTable = ({
             placeholder="Search routes..."
             value={tableSearchText}
             onChange={e => handleSearchTextChange(e.target.value)}
-            style={{ width: 200 }}
+            style={{ 
+              width: 200,
+              borderColor: tableSearchText ? '#000000' : undefined,
+            }}
             allowClear
             disabled={isDaysChanging}
+            onPressEnter={(e) => {
+              // Reapply the search to ensure it's processed
+              handleSearchTextChange(e.target.value);
+            }}
           />
         </div>
       }

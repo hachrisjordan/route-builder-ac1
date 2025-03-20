@@ -182,7 +182,8 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
               width: '24px', 
               height: '24px', 
               marginRight: '8px',
-              objectFit: 'contain'
+              objectFit: 'contain',
+              borderRadius: '4px'
             }}
             onError={(e) => {
               // Hide the image if it fails to load
@@ -226,7 +227,8 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
               width: '16px', 
               height: '16px', 
               marginRight: '4px',
-              objectFit: 'contain'
+              objectFit: 'contain',
+              borderRadius: '4px'
             }}
             onError={(e) => {
               // Hide the image if it fails to load
