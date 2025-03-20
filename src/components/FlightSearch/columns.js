@@ -19,14 +19,14 @@ export const getResultColumns = (onRouteSelect, selectedDays = 60, currentSortFi
     return currentSortOrder === 'ascend' ? 
       <ArrowUpOutlined style={{ 
         marginLeft: 4, 
-        color: '#1890ff',
+        color: '#000000',
         transition: 'all 0.3s ease-in-out',
         transform: 'scale(1)',
         opacity: 1
       }} /> : 
       <ArrowDownOutlined style={{ 
         marginLeft: 4, 
-        color: '#1890ff',
+        color: '#000000',
         transition: 'all 0.3s ease-in-out',
         transform: 'scale(1)',
         opacity: 1
@@ -172,6 +172,7 @@ export const getResultColumns = (onRouteSelect, selectedDays = 60, currentSortFi
             const fullRoute = [record.departure, ...record.connections, record.arrival];
             onRouteSelect(fullRoute);
           }}
+          style={{ color: '#000000' }}
         />
       ),
     }

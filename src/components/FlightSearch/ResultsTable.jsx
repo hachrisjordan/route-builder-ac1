@@ -771,6 +771,10 @@ const ResultsTable = ({
               optionType="button"
               buttonStyle="solid"
               disabled={isDaysChanging}
+              style={{ 
+                '--radio-button-checked-bg': '#000000',
+                '--radio-button-checked-color': '#ffffff',
+              }}
             >
               <Radio.Button value={3}>T-3</Radio.Button>
               <Radio.Button value={7}>T-7</Radio.Button>

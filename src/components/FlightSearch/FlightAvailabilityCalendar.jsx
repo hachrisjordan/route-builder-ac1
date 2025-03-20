@@ -317,13 +317,17 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
 
   return (
     <div>
-      {/* Show Calendar button - always visible */}
+      {/* Show/Hide Calendar button - always visible */}
       <div className="show-calendar-button" style={{ marginBottom: '10px' }}>
         <Button
-          type="primary"
-          onClick={() => setIsCalendarVisible(true)}
+          type={isCalendarVisible ? "default" : "primary"}
+          onClick={() => setIsCalendarVisible(!isCalendarVisible)}
+          style={isCalendarVisible ? 
+            { backgroundColor: '#ffffff', color: '#000000', borderColor: '#000000' } : 
+            undefined
+          }
         >
-          Show Calendar
+          {isCalendarVisible ? 'Hide Calendar' : 'Show Calendar'}
         </Button>
       </div>
       
@@ -340,7 +344,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
             <Button 
               type="primary"
               onClick={goToPrevMonth}
-              style={{ backgroundColor: '#1677ff' }}
+              style={{ backgroundColor: '#000000' }}
             >
               &larr;
             </Button>
@@ -348,7 +352,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
             <Button 
               type="primary"
               onClick={goToNextMonth}
-              style={{ backgroundColor: '#1677ff' }}
+              style={{ backgroundColor: '#000000' }}
             >
               &rarr;
             </Button>
@@ -404,7 +408,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
                     padding: '8px',
                     fontFamily: 'Menlo, monospace',
                     cursor: 'pointer',
-                    border: isStart || isEnd ? '2px solid #1890ff' : 'none'
+                    border: isStart || isEnd ? '2px solid #000000' : 'none'
                   }}
                   onClick={(e) => {
                     // Prevent event bubbling
@@ -511,15 +515,10 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
               <Button
                 type="primary"
-                onClick={() => handleSearch(null)}
+                onClick={() => handleSearch(selectedConnection && stopoverDays ? { airport: selectedConnection, days: stopoverDays } : null)}
                 disabled={!selectionStart || !selectionEnd || (selectedConnection && !stopoverDays)}
               >
                 Search
-              </Button>
-              <Button
-                onClick={() => setIsCalendarVisible(false)}
-              >
-                Hide Calendar
               </Button>
             </div>
           </div>
@@ -534,9 +533,7 @@ const FlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRangeSelec
         currentRoute={currentRoute}
       />
       
-      <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', color: '#888' }}>
-        Route Builder by Ha Nguyen @ 2025
-      </div>
+
     </div>
   );
 };

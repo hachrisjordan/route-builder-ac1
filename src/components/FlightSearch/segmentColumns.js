@@ -1,5 +1,6 @@
 import { CheckOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { Checkbox } from 'antd';
 
 const formatDuration = (minutes) => {
   const hours = Math.floor(minutes / 60);
@@ -42,14 +43,12 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
       dataIndex: 'select',
       width: 30,
       render: (_, record) => (
-        <input 
-          type="checkbox" 
+        <Checkbox
           checked={record.isSelected}
           onChange={() => onFlightSelect(record, record.segmentIndex)}
-          // Allow multiple selections
-          style={{ cursor: 'pointer' }}
-          // Remove any default behavior that might prevent multiple selections
           onClick={(e) => e.stopPropagation()}
+          style={{ cursor: 'pointer' }}
+          className="segment-table-checkbox"
         />
       )
     },
@@ -146,7 +145,7 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
         return (a.economy === true ? 1 : 0) - (b.economy === true ? 1 : 0);
       },
       render: (economy) => economy ? 
-        <span style={{ color: '#52c41a', fontSize: '16px' }}>●</span> : 
+        <span style={{ color: '#000000', fontSize: '16px' }}>●</span> : 
         <span style={{ color: '#d9d9d9' }}>-</span>
     },
     {
@@ -159,7 +158,7 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
         return (a.business === true ? 1 : 0) - (b.business === true ? 1 : 0);
       },
       render: (business) => business ? 
-        <span style={{ color: '#52c41a', fontSize: '16px' }}>●</span> : 
+        <span style={{ color: '#000000', fontSize: '16px' }}>●</span> : 
         <span style={{ color: '#d9d9d9' }}>-</span>
     },
     {
@@ -172,7 +171,7 @@ export const getSegmentColumns = (onFlightSelect, startDay) => {
         return (a.first === true ? 1 : 0) - (b.first === true ? 1 : 0);
       },
       render: (first) => first ? 
-        <span style={{ color: '#52c41a', fontSize: '16px' }}>●</span> : 
+        <span style={{ color: '#000000', fontSize: '16px' }}>●</span> : 
         <span style={{ color: '#d9d9d9' }}>-</span>
     }
   ];
