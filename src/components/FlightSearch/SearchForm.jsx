@@ -170,30 +170,69 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
         ? option.data.label.replace(`${airlineCode} - `, '') 
         : (option.label ? option.label.replace(`${airlineCode} - `, '') : '');
       
+      // Path to airline logo
+      const logoPath = `/${airlineCode}.png`;
+      
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', padding: '4px 0' }}>
-          <span style={{ fontWeight: 'bold' }}>{airlineCode}</span>
-          <span style={{ fontSize: '12px', color: '#666' }}>
-            {airlineName}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '4px 0' }}>
+          <img
+            src={logoPath}
+            alt={airlineCode}
+            style={{ 
+              width: '24px', 
+              height: '24px', 
+              marginRight: '8px',
+              objectFit: 'contain'
+            }}
+            onError={(e) => {
+              // Hide the image if it fails to load
+              e.target.style.display = 'none';
+            }}
+          />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontWeight: 'bold' }}>{airlineCode}</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              {airlineName}
+            </span>
+          </div>
         </div>
       );
     },
-    // Custom tag render to show only airline code in selected tags
+    // Custom tag render to show airline code with logo in selected tags
     tagRender: (props) => {
       const { label, value, closable, onClose } = props;
+      const logoPath = `/${value}.png`;
+      
       return (
         <Tag
-          color="#000000"
+          color="#ffffff"
           closable={closable}
           onClose={onClose}
+          closeIcon={<span style={{ color: '#666666' }}>×</span>}
           style={{ 
             display: 'inline-flex', 
             alignItems: 'center', 
             marginRight: 4,
-            fontFamily: 'Menlo, Monaco, Consolas, monospace'
+            fontFamily: 'Menlo, Monaco, Consolas, monospace',
+            padding: '2px 7px',
+            color: '#000000',
+            border: '1px solid #000000'
           }}
         >
+          <img
+            src={logoPath}
+            alt={value}
+            style={{ 
+              width: '16px', 
+              height: '16px', 
+              marginRight: '4px',
+              objectFit: 'contain'
+            }}
+            onError={(e) => {
+              // Hide the image if it fails to load
+              e.target.style.display = 'none';
+            }}
+          />
           {value}
         </Tag>
       );
