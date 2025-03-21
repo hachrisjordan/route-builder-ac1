@@ -30,6 +30,7 @@ const airlines = [
   { value: 'CX', label: 'Cathay Pacific (CX)' },
   { value: 'VA', label: 'Virgin Australia (VA)' },
   { value: 'AD', label: 'Azul (AD)' },
+  { value: 'EY', label: 'Etihad Airways (EY)' },
 ]
 
 export default airlines;
