@@ -7,3 +7,4 @@
 *.pack
 
 .env.local
+gcp-mcp/
