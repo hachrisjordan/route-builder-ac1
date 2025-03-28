@@ -7,4 +7,6 @@
 *.pack
 
 .env.local
+node_modules/.cache/.eslintcache
+/node_modules/.cache
 gcp-mcp/

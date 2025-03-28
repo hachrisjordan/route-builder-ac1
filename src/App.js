@@ -4,7 +4,7 @@ import { Layout, Menu, Button, Drawer, Tooltip } from 'antd';
 import { AirplaneIcon, MenuIcon, HomeIcon, CloseIcon } from './components/Icons';
 import './App.css';
 import FlightSearch from './pages/FlightSearch';
-import NormalRouteBuilder from './pages/NormalRouteBuilder';
+import NormalRouteBuilderPage from './pages/NormalRouteBuilder';
 
 const { Header, Content, Footer } = Layout;
 
@@ -111,7 +111,7 @@ function AppContent({ mobileMenuOpen, setMobileMenuOpen, scrolled }) {
       <Content className="app-content">
         <Routes>
           <Route path="/ac" element={<FlightSearch />} />
-          <Route path="/normal" element={<NormalRouteBuilder />} />
+          <Route path="/normal" element={<NormalRouteBuilderPage />} />
           <Route path="/" element={<Navigate to="/ac" replace />} />
         </Routes>
       </Content>
