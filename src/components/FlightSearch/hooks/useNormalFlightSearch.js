@@ -348,7 +348,8 @@ export default function useNormalFlightSearch() {
         // For expanded paths, we don't need to generate permutations again
         const flightDataObj = {
           routes: generateRoutePermutations(originalPath),
-          data: processedData
+          data: processedData,
+          rawData: data
         };
 
         setFlightData(flightDataObj);
@@ -452,7 +453,8 @@ export default function useNormalFlightSearch() {
       
       const flightDataObj = {
         routes: routePermutations,
-        data: processedData
+        data: processedData,
+        rawData: data
       };
 
       setFlightData(flightDataObj);
