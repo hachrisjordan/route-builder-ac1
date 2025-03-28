@@ -95,7 +95,9 @@ const HybridPathInput = ({ value, onChange, placeholder = 'Enter path (e.g. NRT/
       setDisplayValue('');
       setCompletedSegments(newSegments);
       setShowDropdown(false);
-      onChange?.(expandedAirports); // Pass expanded airports to parent
+      
+      // Pass the displayString (with group codes) to parent instead of expanded airports
+      onChange?.(displayString);
     } else {
       // Regular airport selection
       const newSegments = [...completedSegments, { type: 'airport', value: selectedValue }];
@@ -156,7 +158,21 @@ const HybridPathInput = ({ value, onChange, placeholder = 'Enter path (e.g. NRT/
     }
     
     setCompletedSegments(segments);
-  }, [inputValue, displayValue]);
+    
+    // Generate the final value using the unexpanded group codes
+    // This ensures we always send the path with group codes to the search function
+    if (segments.length > 0 && !displayValue) {
+      let pathWithGroupCodes = '';
+      segments.forEach(segment => {
+        pathWithGroupCodes += segment.value;
+      });
+      
+      // Only trigger onChange if the path has actually changed
+      if (pathWithGroupCodes !== value) {
+        onChange?.(pathWithGroupCodes);
+      }
+    }
+  }, [inputValue, displayValue, value, onChange]);
 
   // Handle key down
   const handleKeyDown = (e) => {

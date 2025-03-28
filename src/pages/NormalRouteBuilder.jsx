@@ -14,7 +14,9 @@ const NormalRouteBuilderPage = () => {
     handleDateRangeSelect,
     selectedFlights,
     handleFlightSelect,
-    pricingData
+    pricingData,
+    cachedApiKey,
+    saveApiKey
   } = useNormalFlightSearch();
 
   const [currentRoute, setCurrentRoute] = useState(null);
@@ -33,6 +35,8 @@ const NormalRouteBuilderPage = () => {
         onSearch={handleSearchSubmit}
         isLoading={isLoading}
         errors={errors}
+        cachedApiKey={cachedApiKey}
+        saveApiKey={saveApiKey}
       />
 
       {flightData && currentRoute && (

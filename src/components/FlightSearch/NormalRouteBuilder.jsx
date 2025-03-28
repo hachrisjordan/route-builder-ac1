@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Input, DatePicker, Button, Space, Row, Col } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -9,7 +9,7 @@ import './styles/NormalRouteBuilder.css';
 
 const { RangePicker } = DatePicker;
 
-const NormalRouteBuilder = ({ onSearch }) => {
+const NormalRouteBuilder = ({ onSearch, isLoading, errors, cachedApiKey, saveApiKey }) => {
   const [path, setPath] = useState('');
   const [sourcesExcluded, setSourcesExcluded] = useState([]);
   const [apiKey, setApiKey] = useState('');
@@ -17,10 +17,27 @@ const NormalRouteBuilder = ({ onSearch }) => {
   const [flightData, setFlightData] = useState(null);
   const [currentRoute, setCurrentRoute] = useState([]);
 
+  // Load the cached API key when the component mounts
+  useEffect(() => {
+    if (cachedApiKey) {
+      setApiKey(cachedApiKey);
+    }
+  }, [cachedApiKey]);
+
+  // Update the cached API key when it changes
+  const handleApiKeyChange = (e) => {
+    const newApiKey = e.target.value;
+    setApiKey(newApiKey);
+    saveApiKey(newApiKey);
+  };
+
   const handleSearch = () => {
     if (!path) {
       return;
     }
+
+    console.log('🔍 NormalRouteBuilder - Path to search:', path);
+    console.log('🔍 NormalRouteBuilder - Path type:', typeof path);
 
     // Split path into segments for the calendar
     setCurrentRoute(path.split(/[/-]/));
@@ -66,7 +83,7 @@ const NormalRouteBuilder = ({ onSearch }) => {
               <div className="element-label">API Key:</div>
               <Input.Password
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                onChange={handleApiKeyChange}
                 placeholder="Enter your API key"
               />
             </div>
@@ -89,7 +106,8 @@ const NormalRouteBuilder = ({ onSearch }) => {
             <Button
               type="primary"
               onClick={handleSearch}
-              disabled={!path}
+              disabled={!path || isLoading}
+              loading={isLoading}
               className="search-button"
               icon={<SearchOutlined />}
             >
@@ -97,6 +115,14 @@ const NormalRouteBuilder = ({ onSearch }) => {
             </Button>
           </Col>
         </Row>
+        
+        {/* Error messages */}
+        {errors && errors.path && (
+          <div style={{ color: 'red', marginTop: '8px' }}>{errors.path}</div>
+        )}
+        {errors && errors.general && (
+          <div style={{ color: 'red', marginTop: '8px' }}>{errors.general}</div>
+        )}
       </Card>
 
       {flightData && (

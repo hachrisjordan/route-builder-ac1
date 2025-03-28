@@ -28,7 +28,7 @@ export const sources = [
     codename: 'flyingblue'
   },
   {
-    airline: 'Alaska Airlines',
+    airline: 'Alaska',
     ffname: 'Mileage Plan',
     iata: 'AS',
     codename: 'alaska'
@@ -40,7 +40,7 @@ export const sources = [
     codename: 'american'
   },
   {
-    airline: 'Azul Brazilian Airlines',
+    airline: 'Azul',
     ffname: 'TudoAzul',
     iata: 'AD',
     codename: 'azul'
@@ -52,7 +52,7 @@ export const sources = [
     codename: 'copa'
   },
   {
-    airline: 'Delta Air Lines',
+    airline: 'Delta',
     ffname: 'SkyMiles',
     iata: 'DL',
     codename: 'delta'
@@ -64,13 +64,13 @@ export const sources = [
     codename: 'skywards'
   },
   {
-    airline: 'Etihad Airways',
-    ffname: 'Etihad Guest',
+    airline: 'Etihad',
+    ffname: 'Guest',
     iata: 'EY',
     codename: 'etihad'
   },
   {
-    airline: 'GOL Airlines',
+    airline: 'GOL',
     ffname: 'Smiles',
     iata: 'G3',
     codename: 'smiles'
@@ -100,7 +100,7 @@ export const sources = [
     codename: 'qatar'
   },
   {
-    airline: 'Scandinavian Airlines',
+    airline: 'SAS',
     ffname: 'EuroBonus',
     iata: 'SK',
     codename: 'eurobonus'
@@ -118,7 +118,7 @@ export const sources = [
     codename: 'turkish'
   },
   {
-    airline: 'United Airlines',
+    airline: 'United',
     ffname: 'MileagePlus',
     iata: 'UA',
     codename: 'united'
