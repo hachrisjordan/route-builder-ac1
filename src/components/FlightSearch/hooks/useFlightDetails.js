@@ -100,7 +100,7 @@ export default function useFlightDetails(getColumns, initialCombinations = []) {
         }
         
         // Filter out EK and FZ carriers
-        if (trip.Carriers === 'EK' || trip.Carriers === 'FZ') {
+        if (trip.Carriers === 'EK' || trip.Carriers === 'FZ' || trip.Carriers === 'EY') {
           console.log('  ❌ Skipped: Excluded carrier');
           return false;
         }

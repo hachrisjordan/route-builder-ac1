@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Select, InputNumber, Button, Card } from 'antd';
+import { Select, InputNumber, Button, Card, Tag } from 'antd';
 import { SearchOutlined, SwapOutlined } from '@ant-design/icons';
 import { airports } from '../../data/airports';
 import airlines from '../../data/airlines';
@@ -69,19 +69,22 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
       value: airport.IATA,
       label: `${airport.IATA} - ${airport.Name} (${airport.Country})`,
       iata: airport.IATA,
-      name: airport.Name
+      name: airport.Name,
+      country: airport.Country
     })),
     optionRender: (option) => {
       // Extract the parts of the label
       const iataCode = option.value;
-      const label = option.label;
-      const restOfLabel = label.substring(iataCode.length);
+      const airportName = option.data.name;
+      const country = option.data.country;
       
       return (
-        <span>
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '4px 0' }}>
           <span style={{ fontWeight: 'bold' }}>{iataCode}</span>
-          {restOfLabel}
-        </span>
+          <span style={{ fontSize: '12px', color: '#666' }}>
+            {airportName} ({country})
+          </span>
+        </div>
       );
     },
     filterOption: (input, option) => {
@@ -145,7 +148,15 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
     },
     listHeight: 256,
     virtual: true,
-    dropdownStyle: { maxHeight: 400 }
+    dropdownStyle: { 
+      maxHeight: 400,
+      padding: '8px 0',
+      boxShadow: '0 3px 6px -4px rgba(0,0,0,.12), 0 6px 16px 0 rgba(0,0,0,.08), 0 9px 28px 8px rgba(0,0,0,.05)',
+      borderRadius: '8px',
+      zIndex: 1050,
+      overflowY: 'auto',
+      overflowAnchor: 'none'
+    }
   };
 
   const airlineSelectProps = {
@@ -154,10 +165,78 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
     optionRender: (option) => {
       // Bold the airline code part
       const airlineCode = option.value;
+      // Extract airline name more safely
+      const airlineName = option.data && option.data.label 
+        ? option.data.label.replace(`${airlineCode} - `, '') 
+        : (option.label ? option.label.replace(`${airlineCode} - `, '') : '');
+      
+      // Path to airline logo
+      const logoPath = `/${airlineCode}.png`;
+      
       return (
-        <span>
-          <span style={{ fontWeight: 'bold' }}>{airlineCode}</span> - {option.label}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '4px 0' }}>
+          <img
+            src={logoPath}
+            alt={airlineCode}
+            style={{ 
+              width: '24px', 
+              height: '24px', 
+              marginRight: '8px',
+              objectFit: 'contain',
+              borderRadius: '4px'
+            }}
+            onError={(e) => {
+              // Hide the image if it fails to load
+              e.target.style.display = 'none';
+            }}
+          />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontWeight: 'bold' }}>{airlineCode}</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              {airlineName}
+            </span>
+          </div>
+        </div>
+      );
+    },
+    // Custom tag render to show airline code with logo in selected tags
+    tagRender: (props) => {
+      const { label, value, closable, onClose } = props;
+      const logoPath = `/${value}.png`;
+      
+      return (
+        <Tag
+          color="#ffffff"
+          closable={closable}
+          onClose={onClose}
+          closeIcon={<span style={{ color: '#666666' }}>×</span>}
+          style={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            marginRight: 4,
+            fontFamily: 'Menlo, Monaco, Consolas, monospace',
+            padding: '2px 7px',
+            color: '#000000',
+            border: '1px solid #000000'
+          }}
+        >
+          <img
+            src={logoPath}
+            alt={value}
+            style={{ 
+              width: '16px', 
+              height: '16px', 
+              marginRight: '4px',
+              objectFit: 'contain',
+              borderRadius: '4px'
+            }}
+            onError={(e) => {
+              // Hide the image if it fails to load
+              e.target.style.display = 'none';
+            }}
+          />
+          {value}
+        </Tag>
       );
     },
     filterOption: (input, option) => {
@@ -221,7 +300,15 @@ const SearchForm = ({ onSearch, isLoading, errors }) => {
     listHeight: 400,
     virtual: false,
     menuItemSelectedIcon: null,
-    dropdownStyle: { maxHeight: 400 }
+    dropdownStyle: { 
+      maxHeight: 400,
+      padding: '8px 0',
+      boxShadow: '0 3px 6px -4px rgba(0,0,0,.12), 0 6px 16px 0 rgba(0,0,0,.08), 0 9px 28px 8px rgba(0,0,0,.05)',
+      borderRadius: '8px',
+      zIndex: 1050,
+      overflowY: 'auto',
+      overflowAnchor: 'none'
+    }
   };
 
   const handleSubmit = () => {
