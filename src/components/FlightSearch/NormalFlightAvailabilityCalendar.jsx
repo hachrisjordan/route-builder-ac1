@@ -383,72 +383,81 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
       // Check if class flights exist
       if (!classes || !classes[`${classCode}Flights`]) return [];
       
-      // Get flight data with raw data attached
-      let flights = getEnrichedFlightData(route, classCode, date, classes);
+      // Get flights after applying filters
+      const flights = getFlightsForClassWithFilters(route, classCode, date, classes);
       
-      // Apply filters
-      if (directFilter) {
-        flights = flights.filter(flight => {
+      // Check if these flights would result in a "No detailed information" tooltip
+      if (flights.length > 0) {
+        // Check if all flights have no raw data or would be filtered out in createEnhancedTooltip
+        const hasValidFlightData = flights.some(flight => {
           const rawFlight = flight.rawData;
-          if (!rawFlight) return false;
-          return rawFlight[`${classCode}Direct`] === true;
-        });
-      }
-      
-      // Apply source filter to tooltip flights if enabled
-      if (sourceFilter.sources.length > 0) {
-        flights = flights.filter(flight => {
-          const rawFlight = flight.rawData;
-          if (!rawFlight || !rawFlight.source) return false;
-          
-          const matchesSource = sourceFilter.sources.includes(rawFlight.source);
-          return sourceFilter.mode === 'include' ? matchesSource : !matchesSource;
-        });
-      }
-      
-      // Apply airlines filter to tooltip flights if enabled
-      if (airlinesFilter.airlines.length > 0) {
-        flights = flights.filter(flight => {
-          const rawFlight = flight.rawData;
+          // If there's no raw data, this flight won't be shown in the tooltip
           if (!rawFlight) return false;
           
-          // Get the airlines based on direct/indirect
-          const airlinesString = directFilter 
-            ? rawFlight[`${classCode}DirectAirlines`] 
-            : rawFlight[`${classCode}Airlines`];
+          // Get the variables that determine if this flight would be displayed
+          const hasDirect = rawFlight[`${classCode}Direct`];
+          const hasIndirect = rawFlight[`${classCode}Available`];
+          const directCost = parseInt(rawFlight[`${classCode}DirectMileageCost`] || "0", 10);
+          const indirectCost = parseInt(rawFlight[`${classCode}MileageCost`] || "0", 10);
+          const showBothOptions = hasDirect && indirectCost < directCost;
           
-          if (!airlinesString) return false;
+          // Direct filter means only direct flights are shown
+          if (directFilter && !hasDirect) return false;
           
-          // Parse the airlines list
-          const flightAirlines = airlinesString.split(',').map(a => a.trim()).filter(a => a);
-          
-          if (airlinesFilter.mode === 'include') {
-            // In include mode, at least one airline must be included
-            return flightAirlines.some(airline => airlinesFilter.airlines.includes(airline));
-          } else {
-            // In exclude mode, only filter out if ALL airlines are excluded
-            return !flightAirlines.every(airline => airlinesFilter.airlines.includes(airline));
-          }
-        });
-      }
-      
-      // Apply points filter to tooltip flights if enabled
-      if (pointsFilter) {
-        flights = flights.filter(flight => {
-          const rawFlight = flight.rawData;
-          if (!rawFlight) return false;
-          
-          // Get the mileage cost based on direct/indirect
-          let mileageCost;
-          if (directFilter) {
-            mileageCost = parseInt(rawFlight[`${classCode}DirectMileageCost`] || '0', 10);
-          } else {
-            mileageCost = parseInt(rawFlight[`${classCode}MileageCost`] || '0', 10);
+          // Check source filters when applied
+          if (sourceFilter.sources.length > 0) {
+            if (!rawFlight.source) return false;
+            
+            const matchesSource = sourceFilter.sources.includes(rawFlight.source);
+            const passesSourceFilter = sourceFilter.mode === 'include' ? matchesSource : !matchesSource;
+            
+            if (!passesSourceFilter) return false;
           }
           
-          // Check if it's within the range
-          return mileageCost >= pointsFilter[0] && mileageCost <= pointsFilter[1];
+          // Check airline filters when applied
+          if (airlinesFilter.airlines.length > 0) {
+            // Get airlines for direct and indirect
+            const checkAirlinesStr = directFilter ? 
+              rawFlight[`${classCode}DirectAirlines`] || '' : 
+              rawFlight[`${classCode}Airlines`] || '';
+            
+            // Parse airlines list
+            const checkAirlines = checkAirlinesStr.split(',').map(a => a.trim()).filter(a => a);
+            
+            if (checkAirlines.length === 0) return false;
+            
+            // Check if airlines pass the filter
+            const passesAirlineFilter = airlinesFilter.mode === 'include' ?
+              checkAirlines.some(airline => airlinesFilter.airlines.includes(airline)) :
+              !checkAirlines.every(airline => airlinesFilter.airlines.includes(airline));
+              
+            if (!passesAirlineFilter) return false;
+          }
+          
+          // Check points filter when applied
+          if (pointsFilter) {
+            // Get the mileage cost based on direct/indirect
+            let mileageCost;
+            if (directFilter) {
+              mileageCost = parseInt(rawFlight[`${classCode}DirectMileageCost`] || '0', 10);
+            } else {
+              mileageCost = parseInt(rawFlight[`${classCode}MileageCost`] || '0', 10);
+            }
+            
+            // Check if it's within the points range
+            if (mileageCost < pointsFilter[0] || mileageCost > pointsFilter[1]) {
+              return false;
+            }
+          }
+          
+          // At least one condition needs to be true for the flight to be displayed
+          return hasDirect || (hasIndirect && (!directFilter || showBothOptions));
         });
+        
+        // If no valid flight data would be shown in the tooltip, return empty array
+        if (!hasValidFlightData) {
+          return [];
+        }
       }
       
       return flights;
@@ -579,7 +588,7 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
         
         // Check if we have a cheaper indirect option - this is the standard case
         const showBothOptions = hasDirect && indirectCost < directCost;
-        
+      
         // Check if we need to show indirect due to airline filter - only if there's a relevant airline filter
         let showIndirectForAirlineFilter = false;
         
@@ -915,6 +924,17 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
       return tooltipDiv;
     };
 
+    // Check if all classes have no tooltip-able flights
+    const allClassesHaveDashes = classesToShow.every(classCode => {
+      const flights = getFlightsForClass(classCode);
+      return flights.length === 0;
+    });
+
+    // Return null to hide this segment if all classes are dashes
+    if (allClassesHaveDashes) {
+      return null;
+    }
+
     return (
       <div style={{ display: 'flex', gap: '2px' }}>
         {classesToShow.map(classCode => {
@@ -923,13 +943,16 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
           const sources = getSourcesForClass(classCode);
           const flights = getFlightsForClass(classCode);
           
+          // Check if this class has tooltip-able flights
+          const hasTooltipableFlights = flights.length > 0;
+          
           return (
             <div
               key={classCode}
               title={!isAvailable ? "Not Available" : undefined}
               style={{
-                backgroundColor: getBackgroundColor(classCode, isAvailable),
-                color: isAvailable ? '#684634' : '#999',
+                backgroundColor: getBackgroundColor(classCode, isAvailable && hasTooltipableFlights),
+                color: isAvailable && hasTooltipableFlights ? '#684634' : '#999',
                 padding: '0px 4px',
                 borderRadius: '4px',
                 fontSize: '13px',
@@ -937,10 +960,10 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
                 width: '20px',
                 textAlign: 'center',
                 position: 'relative',
-                cursor: isAvailable ? 'pointer' : 'default'
+                cursor: isAvailable && hasTooltipableFlights ? 'pointer' : 'default'
               }}
               onMouseEnter={(e) => {
-                if (isAvailable && flights.length > 0) {
+                if (isAvailable && hasTooltipableFlights) {
                   const tooltipId = `tooltip-${route}-${classCode}-${date}`;
                   
                   // Remove any existing tooltip with the same ID
@@ -1017,8 +1040,8 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
                 }
               }}
             >
-              {isAvailable ? classCode : '-'}
-              {isAvailable && !isDirect && (
+              {isAvailable && hasTooltipableFlights ? classCode : '-'}
+              {isAvailable && hasTooltipableFlights && !isDirect && (
                 <div
                   style={{
                     position: 'absolute',
@@ -5246,13 +5269,64 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
               if (!segment.inScope) return true;
               
               // If it's in scope, check if it passes the filters
-              // Check if there's at least one available cabin class after all filtering
+              // Check if there's at least one available cabin class after all filtering that is tooltip-able
               const classesToCheck = ['Y', 'W', 'J', 'F'];
               return classesToCheck.some(classCode => {
                 if (!segment.classes[classCode]) return false;
+                
                 // Get the flights for this class after all filtering
                 const flights = getFlightsForClassWithFilters(segment.route, classCode, dateString, segment.classes);
-                return flights.length > 0;
+                
+                // Check if these flights have valid data for display that would result in a tooltip
+                return flights.some(flight => {
+                  const rawFlight = flight.rawData;
+                  if (!rawFlight) return false;
+                  
+                  const hasDirect = rawFlight[`${classCode}Direct`];
+                  const hasIndirect = rawFlight[`${classCode}Available`];
+                  
+                  // Apply direct filter
+                  if (directFilter && !hasDirect) return false;
+                  
+                  // Apply source filter
+                  if (sourceFilter.sources.length > 0) {
+                    if (!rawFlight.source) return false;
+                    
+                    const matchesSource = sourceFilter.sources.includes(rawFlight.source);
+                    const passesSourceFilter = sourceFilter.mode === 'include' ? matchesSource : !matchesSource;
+                    
+                    if (!passesSourceFilter) return false;
+                  }
+                  
+                  // Apply airlines filter
+                  if (airlinesFilter.airlines.length > 0) {
+                    const airlinesStr = directFilter ? 
+                      rawFlight[`${classCode}DirectAirlines`] || '' : 
+                      rawFlight[`${classCode}Airlines`] || '';
+                    
+                    const airlines = airlinesStr.split(',').map(a => a.trim()).filter(a => a);
+                    if (airlines.length === 0) return false;
+                    
+                    const passesAirlineFilter = airlinesFilter.mode === 'include' ?
+                      airlines.some(airline => airlinesFilter.airlines.includes(airline)) :
+                      !airlines.every(airline => airlinesFilter.airlines.includes(airline));
+                    
+                    if (!passesAirlineFilter) return false;
+                  }
+                  
+                  // Apply points filter
+                  if (pointsFilter) {
+                    const mileageCost = directFilter
+                      ? parseInt(rawFlight[`${classCode}DirectMileageCost`] || '0', 10)
+                      : parseInt(rawFlight[`${classCode}MileageCost`] || '0', 10);
+                    
+                    if (mileageCost < pointsFilter[0] || mileageCost > pointsFilter[1]) {
+                      return false;
+                    }
+                  }
+                  
+                  return true;
+                });
               });
             });
 
@@ -5312,27 +5386,38 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
                 </div>
                 {showFlights ? (
                   <>
+                  {/* Filter for routes count display - REMOVED */}
                   <div style={{ fontSize: '12px' }}>
-                      {paginatedFlights.map((segment, idx) => (
-                      <div 
-                        key={idx} 
-                        style={{ 
-                          marginBottom: '4px',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: '20px'
-                        }}
-                      >
-                        <div style={{ 
-                          fontSize: '14px',
-                          fontFamily: 'Menlo, monospace'
-                        }}>
-                          {segment.route}
-                        </div>
-                        {renderAvailabilityBadges(segment.route, segment.classes, dateString)}
-                      </div>
-                    ))}
+                      {paginatedFlights.map((segment, idx) => {
+                          // Get the availability badges component
+                          const availabilityBadges = renderAvailabilityBadges(segment.route, segment.classes, dateString);
+                          
+                          // This should already be filtered, but just in case
+                          if (availabilityBadges === null) {
+                            return null;
+                          }
+                          
+                          return (
+                            <div 
+                              key={idx} 
+                              style={{ 
+                                marginBottom: '4px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '20px'
+                              }}
+                            >
+                              <div style={{ 
+                                fontSize: '14px',
+                                fontFamily: 'Menlo, monospace'
+                              }}>
+                                {segment.route}
+                              </div>
+                              {availabilityBadges}
+                            </div>
+                          );
+                        })}
                   </div>
                     
                     {/* Pagination controls */}
