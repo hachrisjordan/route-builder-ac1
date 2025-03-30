@@ -333,7 +333,7 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
       if (!available) return 'transparent';
       switch (classCode) {
         case 'Y': return '#E8E1F2';
-        case 'W': return '#B8A4CC';
+        case 'W': return '#E8E1F2';
         case 'J': return '#F3CD87';
         case 'F': return '#D88A3F';
         default: return 'transparent';
@@ -2990,11 +2990,15 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
         const currentFilter = groupFilters[filter.id] || {};
         return (
           <div key={filter.id} style={{ 
-            display: 'flex', 
-            flexDirection: 'column',
+            display: 'flex',
+            flexWrap: 'wrap',
             gap: '8px', 
+            alignItems: 'center',
             marginBottom: '8px',
-            width: '100%'
+            width: '100%',
+            padding: '6px 8px',
+            backgroundColor: '#fafafa',
+            borderRadius: '4px'
           }}>
             <div style={{ 
               display: 'flex',
