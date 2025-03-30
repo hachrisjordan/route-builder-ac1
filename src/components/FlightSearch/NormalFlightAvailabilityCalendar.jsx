@@ -362,14 +362,9 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
         return false;
       }
       
-      // If any filtering is applied, check if there are any tooltip-able flights
-      if (directFilter || sourceFilter.sources.length > 0 || pointsFilter || airlinesFilter.airlines.length > 0) {
-        const flights = getFlightsForClassWithFilters(route, classCode, date, classes);
-        return flights.length > 0;
-      }
-      
-      // If no additional filtering, return true if it's available
-      return true;
+      // Always check if there are any valid flights after filtering
+      const flights = getFlightsForClassWithFilters(route, classCode, date, classes);
+      return flights.length > 0;
     };
 
     // Get the sources data for a specific class
@@ -378,80 +373,13 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
       return sourcesString ? sourcesString.split(',') : [];
     };
 
-    // Get the flight data for a specific class
+    // Get the flight data for a specific class with all appropriate filters applied
     const getFlightsForClass = (classCode) => {
       // Check if class flights exist
       if (!classes || !classes[`${classCode}Flights`]) return [];
       
-      // Get flight data with raw data attached
-      let flights = getEnrichedFlightData(route, classCode, date, classes);
-      
-      // Apply filters
-      if (directFilter) {
-        flights = flights.filter(flight => {
-          const rawFlight = flight.rawData;
-          if (!rawFlight) return false;
-          return rawFlight[`${classCode}Direct`] === true;
-        });
-      }
-      
-      // Apply source filter to tooltip flights if enabled
-      if (sourceFilter.sources.length > 0) {
-        flights = flights.filter(flight => {
-          const rawFlight = flight.rawData;
-          if (!rawFlight || !rawFlight.source) return false;
-          
-          const matchesSource = sourceFilter.sources.includes(rawFlight.source);
-          return sourceFilter.mode === 'include' ? matchesSource : !matchesSource;
-        });
-      }
-      
-      // Apply airlines filter to tooltip flights if enabled
-      if (airlinesFilter.airlines.length > 0) {
-        flights = flights.filter(flight => {
-          const rawFlight = flight.rawData;
-          if (!rawFlight) return false;
-          
-          // Get the airlines based on direct/indirect
-          const airlinesString = directFilter 
-            ? rawFlight[`${classCode}DirectAirlines`] 
-            : rawFlight[`${classCode}Airlines`];
-          
-          if (!airlinesString) return false;
-          
-          // Parse the airlines list
-          const flightAirlines = airlinesString.split(',').map(a => a.trim()).filter(a => a);
-          
-          if (airlinesFilter.mode === 'include') {
-            // In include mode, at least one airline must be included
-            return flightAirlines.some(airline => airlinesFilter.airlines.includes(airline));
-          } else {
-            // In exclude mode, only filter out if ALL airlines are excluded
-            return !flightAirlines.every(airline => airlinesFilter.airlines.includes(airline));
-          }
-        });
-      }
-      
-      // Apply points filter to tooltip flights if enabled
-      if (pointsFilter) {
-        flights = flights.filter(flight => {
-          const rawFlight = flight.rawData;
-          if (!rawFlight) return false;
-          
-          // Get the mileage cost based on direct/indirect
-          let mileageCost;
-          if (directFilter) {
-            mileageCost = parseInt(rawFlight[`${classCode}DirectMileageCost`] || '0', 10);
-          } else {
-            mileageCost = parseInt(rawFlight[`${classCode}MileageCost`] || '0', 10);
-          }
-          
-          // Check if it's within the range
-          return mileageCost >= pointsFilter[0] && mileageCost <= pointsFilter[1];
-        });
-      }
-      
-      return flights;
+      // Use our enhanced filter function that properly handles all filter types (global, group, segment)
+      return getFlightsForClassWithFilters(route, classCode, date, classes);
     };
 
     // Get the full airline name from source codename
@@ -928,8 +856,8 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
               key={classCode}
               title={!isAvailable ? "Not Available" : undefined}
               style={{
-                backgroundColor: getBackgroundColor(classCode, isAvailable),
-                color: isAvailable ? '#684634' : '#999',
+                backgroundColor: getBackgroundColor(classCode, isAvailable && flights.length > 0),
+                color: isAvailable && flights.length > 0 ? '#684634' : '#999',
                 padding: '0px 4px',
                 borderRadius: '4px',
                 fontSize: '13px',
@@ -937,7 +865,7 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
                 width: '20px',
                 textAlign: 'center',
                 position: 'relative',
-                cursor: isAvailable ? 'pointer' : 'default'
+                cursor: isAvailable && flights.length > 0 ? 'pointer' : 'default'
               }}
               onMouseEnter={(e) => {
                 if (isAvailable && flights.length > 0) {
@@ -1017,8 +945,8 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
                 }
               }}
             >
-              {isAvailable ? classCode : '-'}
-              {isAvailable && !isDirect && (
+              {isAvailable && flights.length > 0 ? classCode : '-'}
+              {isAvailable && flights.length > 0 && !isDirect && (
                 <div
                   style={{
                     position: 'absolute',
@@ -1158,22 +1086,166 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
       ? segment.split('-') 
       : segment.route.split('-');
     
-    // Check if this segment follows the sequence in currentRoute
-    for (let i = 0; i < currentRoute.length - 1; i++) {
-      const fromGroup = currentRoute[i];
-      const toGroup = currentRoute[i + 1];
+    // Helper function to check if an airport is in a segment group
+    const isAirportInSegment = (airport, segment) => {
+      // Direct match
+      if (segment === airport) return true;
       
-      // Get airports for each group
-      const fromAirports = airportGroups[fromGroup]?.split('/') || [fromGroup];
-      const toAirports = airportGroups[toGroup]?.split('/') || [toGroup];
+      // Check if it's an airport group with '/' already in it
+      if (segment.includes('/')) {
+        const airports = segment.split('/');
+        return airports.includes(airport);
+      }
       
-      // If this segment is part of the current route section
-      if (fromAirports.includes(origin) && toAirports.includes(destination)) {
-        return true; // This is a valid segment
+      // Check if it's in the airport group by code
+      if (airportGroups[segment]) {
+        const airports = airportGroups[segment].split('/');
+        return airports.includes(airport);
+      }
+      
+      return false;
+    };
+    
+    // Helper function to expand a segment into its constituent airports
+    const expandSegment = (segment) => {
+      if (segment.includes('/')) {
+        // If it's already expanded, just split it
+        return segment.split('/');
+      } else if (airportGroups[segment]) {
+        // If it's an airport group, expand it
+        return airportGroups[segment].split('/');
+      } else {
+        // Otherwise, it's a single airport
+        return [segment];
+      }
+    };
+    
+    // Break down the user's input path into all possible combinations
+    // First, expand all segments in the current route
+    const expandedSegments = currentRoute.map(segment => {
+      // If the segment contains multiple options (like EST/WST)
+      if (segment.includes('/')) {
+        // Split it and handle each option separately
+        const segmentParts = segment.split('/');
+        // For each part, check if it's an airport group and expand if needed
+        return segmentParts.flatMap(part => {
+          if (airportGroups[part]) {
+            return airportGroups[part].split('/');
+          }
+          return [part];
+        });
+      } else if (airportGroups[segment]) {
+        // If it's a single airport group, expand it
+        return airportGroups[segment].split('/');
+      } else {
+        // Otherwise, it's a single airport
+        return [segment];
+      }
+    });
+    
+    // Generate all possible valid routes using the expanded segments
+    const validRoutes = new Set();
+    const validPaths = [];
+    
+    // Recursive function to generate all possible paths through the expanded segments
+    const generatePaths = (currentPath = [], segmentIndex = 0) => {
+      if (segmentIndex >= expandedSegments.length) {
+        // We've reached the end of the segments, add this path
+        if (currentPath.length >= 2) {
+          validPaths.push([...currentPath]);
+        }
+        return;
+      }
+      
+      // Get the airports for the current segment
+      const airports = expandedSegments[segmentIndex];
+      
+      // Add each airport to the path and continue
+      airports.forEach(airport => {
+        currentPath.push(airport);
+        generatePaths(currentPath, segmentIndex + 1);
+        currentPath.pop(); // Backtrack
+      });
+    };
+    
+    // Start generating paths
+    generatePaths();
+    
+    // For each valid path, generate all valid routes between consecutive airports
+    validPaths.forEach(path => {
+      for (let i = 0; i < path.length - 1; i++) {
+        const from = path[i];
+        const to = path[i + 1];
+        validRoutes.add(`${from}-${to}`);
+      }
+    });
+    
+    // For multi-segment paths (3+ segments), also consider "jumping" segments
+    // This handles cases like USA-DOH-SAS where flights can go directly from USA to SAS
+    validPaths.forEach(path => {
+      if (path.length >= 3) {
+        for (let i = 0; i < path.length - 2; i++) {
+          for (let j = i + 2; j < path.length; j++) {
+            // Create a route from airport i to airport j (skipping intermediate airports)
+            const from = path[i];
+            const to = path[j];
+            validRoutes.add(`${from}-${to}`);
+          }
+        }
+      }
+    });
+    
+    // Check if the segment is valid by different criteria
+    
+    // 1. Check if the route is directly in the valid routes we generated
+    const isInValidRoutes = validRoutes.has(`${origin}-${destination}`);
+    
+    // 2. Check if this flight is part of a valid path
+    let isPartOfValidPath = false;
+    
+    // Check each valid path
+    for (const path of validPaths) {
+      // Check if origin and destination are both in the path and in the correct order
+      const originIndex = path.indexOf(origin);
+      const destIndex = path.indexOf(destination);
+      
+      if (originIndex !== -1 && destIndex !== -1 && originIndex < destIndex) {
+        isPartOfValidPath = true;
+        break;
       }
     }
     
-    return false; // Segment doesn't match any part of the route sequence
+    // 3. Check if airports are in consecutive segments of the original route
+    let isInConsecutiveSegments = false;
+    for (let i = 0; i < currentRoute.length - 1; i++) {
+      const fromSegment = currentRoute[i];
+      const toSegment = currentRoute[i + 1];
+      
+      if (isAirportInSegment(origin, fromSegment) && 
+          isAirportInSegment(destination, toSegment)) {
+        isInConsecutiveSegments = true;
+        break;
+      }
+    }
+    
+    // 4. Check for airports in non-consecutive segments
+    let isInNonConsecutiveSegments = false;
+    for (let i = 0; i < currentRoute.length; i++) {
+      for (let j = i + 2; j < currentRoute.length; j++) {
+        const fromSegment = currentRoute[i];
+        const toSegment = currentRoute[j];
+        
+        if (isAirportInSegment(origin, fromSegment) && 
+            isAirportInSegment(destination, toSegment)) {
+          isInNonConsecutiveSegments = true;
+          break;
+        }
+      }
+      if (isInNonConsecutiveSegments) break;
+    }
+    
+    // A segment is valid if it matches any of the above criteria
+    return isInValidRoutes || isPartOfValidPath || isInConsecutiveSegments || isInNonConsecutiveSegments;
   };
 
   // Get all unique segments from filtered flights
@@ -1196,9 +1268,97 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
     }
     
     // Filter out segments that don't follow the route sequence
-    return Array.from(segments)
-      .filter(isValidSegmentForRoute)
-      .sort();
+    const validSegments = Array.from(segments).filter(isValidSegmentForRoute);
+    
+    // Extract segment info with sequence metadata for sorting
+    return validSegments.map(segment => {
+      const [origin, destination] = segment.split('-');
+      
+      // Find corresponding segment in the route
+      let segmentSequence = Infinity;
+      
+      // Check direct segment matches
+      for (let i = 0; i < currentRoute.length - 1; i++) {
+        const fromSegment = currentRoute[i];
+        const toSegment = currentRoute[i + 1];
+        
+        // Helper function to check if an airport is in a segment group
+        const isAirportInSegment = (airport, segment) => {
+          if (segment === airport) return true;
+          if (segment.includes('/')) {
+            return segment.split('/').includes(airport);
+          }
+          if (airportGroups[segment]) {
+            return airportGroups[segment].split('/').includes(airport);
+          }
+          return false;
+        };
+        
+        // Check if this segment matches the current route segment pair
+        if (isAirportInSegment(origin, fromSegment) && 
+            isAirportInSegment(destination, toSegment)) {
+          segmentSequence = i;
+          break;
+        }
+      }
+      
+      // Also check non-consecutive segments if not found
+      if (segmentSequence === Infinity) {
+        for (let i = 0; i < currentRoute.length; i++) {
+          for (let j = i + 2; j < currentRoute.length; j++) {
+            const fromSegment = currentRoute[i];
+            const toSegment = currentRoute[j];
+            
+            // Check if this segment matches non-consecutive route segments
+            if (isAirportInSegment(origin, fromSegment) && 
+                isAirportInSegment(destination, toSegment)) {
+              segmentSequence = i;
+              break;
+            }
+          }
+          if (segmentSequence !== Infinity) break;
+        }
+      }
+      
+      return {
+        segment,
+        sequence: segmentSequence === Infinity ? 999 : segmentSequence
+      };
+    })
+    .sort((a, b) => {
+      // Sort by sequence first
+      if (a.sequence !== b.sequence) {
+        return a.sequence - b.sequence;
+      }
+      // Then alphabetically within the same sequence
+      return a.segment.localeCompare(b.segment);
+    })
+    .map(item => item.segment);
+  };
+  
+  // Function to get ordered segments with enhanced functionality
+  const getOrderedSegments = () => {
+    // Use the more comprehensive implementation from below (line ~3940)
+    const availableSegments = getUniqueSegments();
+    
+    // If we have a custom order, use it
+    if (segmentOrder.length > 0) {
+      // Start with ordered segments
+      const orderedSegments = [...segmentOrder];
+      
+      // Add any new segments that aren't in the order yet
+      availableSegments.forEach(segment => {
+        if (!orderedSegments.includes(segment)) {
+          orderedSegments.push(segment);
+        }
+      });
+      
+      // Remove any segments that no longer exist
+      return orderedSegments.filter(segment => availableSegments.includes(segment));
+    }
+    
+    // Default ordering - alphabetical
+    return availableSegments.sort();
   };
   
   // Get unique sources from filtered flights
@@ -1350,7 +1510,8 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
   // Render the segments dropdown content
   const renderSegmentsDropdown = () => {
     // Get filtered segments based on search text
-    const allSegments = getOrderedSegments();
+    // Use our ordered unique segments that are sorted by segment sequence
+    const allSegments = uniqueSegments;
     const filteredSegments = allSegments.filter(segment => 
       segment.toLowerCase().includes(segmentSearchText.toLowerCase())
     );
@@ -3016,17 +3177,17 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
               </Dropdown>
               
               <Checkbox 
-                checked={currentFilter.directFilter || false}
+                checked={currentFilter.directOnly || false}
                 onChange={e => setGroupFilters(prev => ({
                   ...prev,
                   [filter.id]: {
                     ...prev[filter.id],
-                    directFilter: e.target.checked
+                    directOnly: e.target.checked
                   }
                 }))}
                 style={{ marginLeft: '8px' }}
               >
-                <span style={{ fontWeight: currentFilter.directFilter ? 600 : 400 }}>Direct Only</span>
+                <span style={{ fontWeight: currentFilter.directOnly ? 600 : 400 }}>Direct Only</span>
               </Checkbox>
             </div>
           </div>
@@ -3170,17 +3331,17 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
               </Dropdown>
               
               <Checkbox 
-                checked={currentFilter.directFilter || false}
+                checked={currentFilter.directOnly || false}
                 onChange={e => setSegmentFilters(prev => ({
                   ...prev,
                   [filter.id]: {
                     ...prev[filter.id],
-                    directFilter: e.target.checked
+                    directOnly: e.target.checked
                   }
                 }))}
                 style={{ marginLeft: '8px' }}
               >
-                <span style={{ fontWeight: currentFilter.directFilter ? 600 : 400 }}>Direct Only</span>
+                <span style={{ fontWeight: currentFilter.directOnly ? 600 : 400 }}>Direct Only</span>
               </Checkbox>
             </div>
           </div>
@@ -3506,6 +3667,15 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
     }, {});
   };
 
+  // Helper function to properly normalize boolean values that might be stored as strings
+  const normalizeBoolean = (value) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return Boolean(value);
+  };
+
   // Get flights for class with specific filters applied (global, group, and segment)
   const getFlightsForClassWithFilters = (route, classCode, date, classData) => {
     // Safety check for inputs
@@ -3522,224 +3692,271 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
     // Start with all flights
     let filteredFlights = [...flights];
     
-    // Step 1: Apply global filters if any are active
-    const hasGlobalFilters = sourceFilter.sources.length > 0 || 
-                            airlinesFilter.airlines.length > 0 || 
-                            pointsFilter !== null ||
-                            dateFilter.length > 0;
+    // Parse route to get origin and destination
+    const [origin, destination] = route.split('-');
     
-    if (hasGlobalFilters) {
-      // Apply source filter
-      if (sourceFilter.sources.length > 0) {
-        filteredFlights = filteredFlights.filter(flight => {
-          const flightSource = flight.rawData?.source || '';
-          const isIncluded = sourceFilter.sources.includes(flightSource);
-          return sourceFilter.mode === 'include' ? isIncluded : !isIncluded;
-        });
-      }
-      
-      // Apply airline filter
-      if (airlinesFilter.airlines.length > 0) {
-        filteredFlights = filteredFlights.filter(flight => {
-          const flightAirlines = flight.rawData?.[`${classCode}Airlines`]?.split(', ') || [];
-          const hasMatchingAirline = flightAirlines.some(airline => 
-            airlinesFilter.airlines.includes(airline)
-          );
-          return airlinesFilter.mode === 'include' ? hasMatchingAirline : !hasMatchingAirline;
-        });
-      }
-      
-      // Apply points filter
-      if (pointsFilter !== null) {
-        filteredFlights = filteredFlights.filter(flight => {
-          const points = parseInt(flight.rawData?.[`${classCode}MileageCost`] || '0', 10);
-          return points >= pointsFilter[0] && points <= pointsFilter[1];
-        });
-      }
-      
-      // Apply date filter
-      if (dateFilter.length > 0) {
-        if (!dateFilter.includes(date)) {
-          return []; // Date filtered out at global level
-        }
-      }
-    }
-    
-    // Step 2: Apply group filters if any are active
-    const activeGroupFilters = Object.values(groupFilters).filter(
-      filter => filter.originFilter?.airports?.length > 0 || filter.destFilter?.airports?.length > 0
-    );
-    
-    if (activeGroupFilters.length > 0) {
-      // Parse route to get origin and destination
-            const [origin, destination] = route.split('-');
-      
-      // Check if this route passes any group filter
-      let passesAnyGroupFilter = false;
-      
-      for (const groupFilter of activeGroupFilters) {
-        const originFilter = groupFilter.originFilter || { mode: 'include', airports: [] };
-        const destFilter = groupFilter.destFilter || { mode: 'include', airports: [] };
-        
-        // Check if origin and destination match the filter
-        const originMatch = originFilter.airports.length === 0 || 
-          (originFilter.mode === 'include' ? 
-            originFilter.airports.includes(origin) : 
-            !originFilter.airports.includes(origin));
-            
-        const destMatch = destFilter.airports.length === 0 || 
-          (destFilter.mode === 'include' ? 
-            destFilter.airports.includes(destination) : 
-            !destFilter.airports.includes(destination));
-        
-        // If both origin and destination match, check additional filters
-        if (originMatch && destMatch) {
-          let passesFurtherFilters = true;
-          
-          // Apply group source filter
-          if (groupFilter.sourceFilter?.sources?.length > 0) {
-            passesFurtherFilters = filteredFlights.some(flight => {
-              const flightSource = flight.rawData?.source || '';
-              const isIncluded = groupFilter.sourceFilter.sources.includes(flightSource);
-              return groupFilter.sourceFilter.mode === 'include' ? isIncluded : !isIncluded;
-            });
-          }
-          
-          // Apply group airline filter
-          if (passesFurtherFilters && groupFilter.airlinesFilter?.airlines?.length > 0) {
-            passesFurtherFilters = filteredFlights.some(flight => {
-              const flightAirlines = flight.rawData?.[`${classCode}Airlines`]?.split(', ') || [];
-              const hasMatchingAirline = flightAirlines.some(airline => 
-                groupFilter.airlinesFilter.airlines.includes(airline)
-              );
-              return groupFilter.airlinesFilter.mode === 'include' ? hasMatchingAirline : !hasMatchingAirline;
-            });
-          }
-          
-          // Apply group points filter
-          if (passesFurtherFilters && groupFilter.pointsFilter) {
-            passesFurtherFilters = filteredFlights.some(flight => {
-              const points = parseInt(flight.rawData?.[`${classCode}MileageCost`] || '0', 10);
-              return points >= groupFilter.pointsFilter[0] && points <= groupFilter.pointsFilter[1];
-            });
-          }
-          
-          // Apply group date filter
-          if (passesFurtherFilters && groupFilter.dateFilter?.length > 0) {
-            passesFurtherFilters = groupFilter.dateFilter.includes(date);
-          }
-          
-          // Apply direct only filter for group
-          if (passesFurtherFilters && groupFilter.directOnly) {
-            passesFurtherFilters = filteredFlights.some(flight => 
-              flight.rawData?.[`${classCode}Direct`] === true
-            );
-          }
-          
-          if (passesFurtherFilters) {
-            passesAnyGroupFilter = true;
-            break;
-          }
-        }
-      }
-      
-      if (!passesAnyGroupFilter) {
-        return [];
-      }
-    }
-    
-    // Step 3: Apply segment filters if any are active
+    // Check if there are any active segment filters for this specific route
     const activeSegmentFilters = Object.values(segmentFilters).filter(
-      filter => filter.segments?.length > 0
+      filter => filter.segments?.length > 0 && filter.segments.includes(route)
     );
     
+    // Check if there are any active group filters that match this route
+    const activeGroupFilters = Object.values(groupFilters).filter(filter => {
+      const originFilter = filter.originFilter || { mode: 'include', airports: [] };
+      const destFilter = filter.destFilter || { mode: 'include', airports: [] };
+      
+      // Check if origin matches
+      const originMatch = originFilter.airports.length === 0 || 
+        (originFilter.mode === 'include' ? 
+          originFilter.airports.includes(origin) : 
+          !originFilter.airports.includes(origin));
+          
+      // Check if destination matches
+      const destMatch = destFilter.airports.length === 0 || 
+        (destFilter.mode === 'include' ? 
+          destFilter.airports.includes(destination) : 
+          !destFilter.airports.includes(destination));
+          
+      const matches = originMatch && destMatch;
+      return matches;
+    });
+    
+    // Priority: Segment > Group > Global
+    // If we have segment filters that apply to this route, use them
     if (activeSegmentFilters.length > 0) {
-      // Check if this route passes any segment filter
       let passesAnySegmentFilter = false;
       
       for (const segmentFilter of activeSegmentFilters) {
-        // Check if the current route matches any of the segments in the filter
-        if (segmentFilter.segments.includes(route)) {
-          let passesFurtherFilters = true;
-          
-          // Apply segment source filter
-          if (segmentFilter.sourceFilter?.sources?.length > 0) {
-            passesFurtherFilters = filteredFlights.some(flight => {
-              const flightSource = flight.rawData?.source || '';
-              const isIncluded = segmentFilter.sourceFilter.sources.includes(flightSource);
-              return segmentFilter.sourceFilter.mode === 'include' ? isIncluded : !isIncluded;
-            });
+        let currentFilteredFlights = [...filteredFlights];
+        
+        // Apply direct only filter for segment first as it's most restrictive
+        if (segmentFilter.directOnly) {
+          currentFilteredFlights = currentFilteredFlights.filter(flight => {
+            // Check the ${classCode}Direct property, normalizing boolean values
+            const directValue = flight.rawData?.[`${classCode}Direct`];
+            const isDirect = normalizeBoolean(directValue);
+            return isDirect;
+          });
+          if (currentFilteredFlights.length === 0) {
+            continue; // Skip to next filter if no flights pass
           }
+        }
+        
+        // Apply segment source filter
+        if (segmentFilter.sourceFilter?.sources?.length > 0) {
+          currentFilteredFlights = currentFilteredFlights.filter(flight => {
+            const flightSource = flight.rawData?.source || '';
+            const isIncluded = segmentFilter.sourceFilter.sources.includes(flightSource);
+            return segmentFilter.sourceFilter.mode === 'include' ? isIncluded : !isIncluded;
+          });
           
-          // Apply segment airline filter
-          if (passesFurtherFilters && segmentFilter.airlinesFilter?.airlines?.length > 0) {
-            passesFurtherFilters = filteredFlights.some(flight => {
-              const flightAirlines = flight.rawData?.[`${classCode}Airlines`]?.split(', ') || [];
-              const hasMatchingAirline = flightAirlines.some(airline => 
-                segmentFilter.airlinesFilter.airlines.includes(airline)
-              );
-              return segmentFilter.airlinesFilter.mode === 'include' ? hasMatchingAirline : !hasMatchingAirline;
-            });
+          if (currentFilteredFlights.length === 0) {
+            continue; // Skip to next filter if no flights pass
           }
-          
-          // Apply segment points filter
-          if (passesFurtherFilters && segmentFilter.pointsFilter) {
-            passesFurtherFilters = filteredFlights.some(flight => {
-              const points = parseInt(flight.rawData?.[`${classCode}MileageCost`] || '0', 10);
-              return points >= segmentFilter.pointsFilter[0] && points <= segmentFilter.pointsFilter[1];
-            });
-          }
-          
-          // Apply segment date filter
-          if (passesFurtherFilters && segmentFilter.dateFilter?.length > 0) {
-            passesFurtherFilters = segmentFilter.dateFilter.includes(date);
-          }
-          
-          // Apply direct only filter for segment
-          if (passesFurtherFilters && segmentFilter.directOnly) {
-            passesFurtherFilters = filteredFlights.some(flight => 
-              flight.rawData?.[`${classCode}Direct`] === true
+        }
+        
+        // Apply segment airline filter
+        if (segmentFilter.airlinesFilter?.airlines?.length > 0) {
+          currentFilteredFlights = currentFilteredFlights.filter(flight => {
+            const flightAirlines = flight.rawData?.[`${classCode}Airlines`]?.split(', ') || [];
+            const hasMatchingAirline = flightAirlines.some(airline => 
+              segmentFilter.airlinesFilter.airlines.includes(airline)
             );
-          }
+            return segmentFilter.airlinesFilter.mode === 'include' ? hasMatchingAirline : !hasMatchingAirline;
+          });
           
-          if (passesFurtherFilters) {
-            passesAnySegmentFilter = true;
-            break;
+          if (currentFilteredFlights.length === 0) {
+            continue; // Skip to next filter if no flights pass
           }
+        }
+        
+        // Apply segment points filter
+        if (segmentFilter.pointsFilter) {
+          currentFilteredFlights = currentFilteredFlights.filter(flight => {
+            const points = parseInt(flight.rawData?.[`${classCode}MileageCost`] || '0', 10);
+            return points >= segmentFilter.pointsFilter[0] && points <= segmentFilter.pointsFilter[1];
+          });
+          
+          if (currentFilteredFlights.length === 0) {
+            continue; // Skip to next filter if no flights pass
+          }
+        }
+        
+        // Apply segment date filter
+        if (segmentFilter.dateFilter?.length > 0) {
+          if (!segmentFilter.dateFilter.includes(date)) {
+            continue; // Skip to next filter if date doesn't match
+          }
+        }
+        
+        // If we get here, this filter has passed flights
+        if (currentFilteredFlights.length > 0) {
+          passesAnySegmentFilter = true;
+          filteredFlights = currentFilteredFlights; // Update filtered flights with segment filter results
+          break;
         }
       }
       
       if (!passesAnySegmentFilter) {
-        return [];
+        return []; // No segment filters passed, return empty array
+      }
+    }
+    // If we have group filters that apply to this route, use them
+    else if (activeGroupFilters.length > 0) {
+      let passesAnyGroupFilter = false;
+      
+      for (const groupFilter of activeGroupFilters) {
+        let currentFilteredFlights = [...filteredFlights];
+        
+        // Apply direct only filter for group first as it's most restrictive
+        if (groupFilter.directOnly) {
+          currentFilteredFlights = currentFilteredFlights.filter(flight => {
+            // Check the ${classCode}Direct property, normalizing boolean values
+            const directValue = flight.rawData?.[`${classCode}Direct`];
+            const isDirect = normalizeBoolean(directValue);
+            return isDirect;
+          });
+          
+          if (currentFilteredFlights.length === 0) {
+            continue; // Skip to next filter if no flights pass
+          }
+        }
+        
+        // Apply group source filter
+        if (groupFilter.sourceFilter?.sources?.length > 0) {
+          currentFilteredFlights = currentFilteredFlights.filter(flight => {
+            const flightSource = flight.rawData?.source || '';
+            const isIncluded = groupFilter.sourceFilter.sources.includes(flightSource);
+            return groupFilter.sourceFilter.mode === 'include' ? isIncluded : !isIncluded;
+          });
+          
+          if (currentFilteredFlights.length === 0) {
+            continue; // Skip to next filter if no flights pass
+          }
+        }
+        
+        // Apply group airline filter
+        if (groupFilter.airlinesFilter?.airlines?.length > 0) {
+          currentFilteredFlights = currentFilteredFlights.filter(flight => {
+            const flightAirlines = flight.rawData?.[`${classCode}Airlines`]?.split(', ') || [];
+            const hasMatchingAirline = flightAirlines.some(airline => 
+              groupFilter.airlinesFilter.airlines.includes(airline)
+            );
+            return groupFilter.airlinesFilter.mode === 'include' ? hasMatchingAirline : !hasMatchingAirline;
+          });
+          
+          if (currentFilteredFlights.length === 0) {
+            continue; // Skip to next filter if no flights pass
+          }
+        }
+        
+        // Apply group points filter
+        if (groupFilter.pointsFilter) {
+          currentFilteredFlights = currentFilteredFlights.filter(flight => {
+            const points = parseInt(flight.rawData?.[`${classCode}MileageCost`] || '0', 10);
+            return points >= groupFilter.pointsFilter[0] && points <= groupFilter.pointsFilter[1];
+          });
+          
+          if (currentFilteredFlights.length === 0) {
+            continue; // Skip to next filter if no flights pass
+          }
+        }
+        
+        // Apply group date filter
+        if (groupFilter.dateFilter?.length > 0) {
+          if (!groupFilter.dateFilter.includes(date)) {
+            continue; // Skip to next filter if date doesn't match
+          }
+        }
+        
+        // If we get here, this filter has passed flights
+        if (currentFilteredFlights.length > 0) {
+          passesAnyGroupFilter = true;
+          filteredFlights = currentFilteredFlights; // Update filtered flights with group filter results
+          break;
+        }
+      }
+      
+      if (!passesAnyGroupFilter) {
+        return []; // No group filters passed, return empty array
+      }
+    }
+    // If no specific filters apply to this route, use global filters
+    else {
+      const hasGlobalFilters = sourceFilter.sources.length > 0 || 
+                              airlinesFilter.airlines.length > 0 || 
+                              pointsFilter !== null ||
+                              dateFilter.length > 0 ||
+                              directFilter;
+      
+      if (hasGlobalFilters) {
+        // Apply direct filter first as it's most restrictive
+        if (directFilter) {
+          filteredFlights = filteredFlights.filter(flight => {
+            // Check the ${classCode}Direct property, normalizing boolean values
+            const directValue = flight.rawData?.[`${classCode}Direct`];
+            const isDirect = normalizeBoolean(directValue);
+            return isDirect;
+          });
+          if (filteredFlights.length === 0) {
+            return []; // No flights pass the direct filter
+          }
+        }
+        
+        // Apply source filter
+        if (sourceFilter.sources.length > 0) {
+          filteredFlights = filteredFlights.filter(flight => {
+            const flightSource = flight.rawData?.source || '';
+            const isIncluded = sourceFilter.sources.includes(flightSource);
+            return sourceFilter.mode === 'include' ? isIncluded : !isIncluded;
+          });
+          
+          if (filteredFlights.length === 0) {
+            return []; // No flights pass the source filter
+          }
+        }
+        
+        // Apply airline filter
+        if (airlinesFilter.airlines.length > 0) {
+          filteredFlights = filteredFlights.filter(flight => {
+            const flightAirlines = flight.rawData?.[`${classCode}Airlines`]?.split(', ') || [];
+            const hasMatchingAirline = flightAirlines.some(airline => 
+              airlinesFilter.airlines.includes(airline)
+            );
+            return airlinesFilter.mode === 'include' ? hasMatchingAirline : !hasMatchingAirline;
+          });
+          
+          if (filteredFlights.length === 0) {
+            return []; // No flights pass the airline filter
+          }
+        }
+        
+        // Apply points filter
+        if (pointsFilter !== null) {
+          filteredFlights = filteredFlights.filter(flight => {
+            const points = parseInt(flight.rawData?.[`${classCode}MileageCost`] || '0', 10);
+            return points >= pointsFilter[0] && points <= pointsFilter[1];
+          });
+          
+          if (filteredFlights.length === 0) {
+            return []; // No flights pass the points filter
+          }
+        }
+        
+        // Apply date filter
+        if (dateFilter.length > 0) {
+          if (!dateFilter.includes(date)) {
+            return []; // Date filtered out at global level
+          }
+        }
       }
     }
     
     return filteredFlights;
   };
 
-  // Get ordered segments based on user-defined order
-  const getOrderedSegments = () => {
-    const availableSegments = getUniqueSegments();
-    
-    // If we have a custom order, use it
-    if (segmentOrder.length > 0) {
-      // Start with ordered segments
-      const orderedSegments = [...segmentOrder];
-      
-      // Add any new segments that aren't in the order yet
-      availableSegments.forEach(segment => {
-        if (!orderedSegments.includes(segment)) {
-          orderedSegments.push(segment);
-        }
-      });
-      
-      // Remove any segments that no longer exist
-      return orderedSegments.filter(segment => availableSegments.includes(segment));
-    }
-    
-    // Default ordering - alphabetical
-    return availableSegments.sort();
-  };
+  // Note: This duplicate implementation has been moved to line 1340
+  // and combined with the original getOrderedSegments function
 
   // Get unique origin airports from flight data
   const getUniqueOriginAirports = () => {

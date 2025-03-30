@@ -67,28 +67,78 @@ export default function useNormalFlightSearch() {
     
     // Get all possible valid routes from our segments
     const validRoutes = new Set();
+    const validPaths = [];
     
-    // Generate valid routes for each consecutive pair of segments
-    for (let i = 0; i < routeSegments.length - 1; i++) {
-      const fromGroup = routeSegments[i];
-      const toGroup = routeSegments[i + 1];
+    // Generate all possible paths through the segments
+    const generatePaths = (currentPath = [], segmentIndex = 0) => {
+      if (segmentIndex >= routeSegments.length) {
+        // We've reached the end of the segments, add this path
+        if (currentPath.length >= 2) {
+          validPaths.push([...currentPath]);
+        }
+        return;
+      }
       
-      // Get airports for each group
-      const fromAirports = fromGroup.includes('/') 
-        ? fromGroup.split('/')  // If it's an expanded value like "SFO/LAX"
-        : (airportGroups[fromGroup]?.split('/') || [fromGroup]); // If it's a group code
+      // Get the current segment
+      const segment = routeSegments[segmentIndex];
       
-      const toAirports = toGroup.includes('/') 
-        ? toGroup.split('/')  // If it's an expanded value like "SFO/LAX"
-        : (airportGroups[toGroup]?.split('/') || [toGroup]); // If it's a group code
+      // Expand the segment to get all airports
+      let airports = [];
       
-      // Generate all valid combinations for this pair
-      fromAirports.forEach(from => {
-        toAirports.forEach(to => {
-          validRoutes.add(`${from}-${to}`);
+      // Handle all segment expansions uniformly
+      if (segment.includes('/')) {
+        // If the segment contains multiple options (like EST/WST)
+        // Split it and handle each option separately
+        const segmentParts = segment.split('/');
+        // For each part, check if it's an airport group and expand if needed
+        airports = segmentParts.flatMap(part => {
+          if (airportGroups[part]) {
+            return airportGroups[part].split('/');
+          }
+          return [part];
         });
+      } else if (airportGroups[segment]) {
+        // If it's a single airport group, expand it
+        airports = airportGroups[segment].split('/');
+      } else {
+        // Otherwise, it's a single airport
+        airports = [segment];
+      }
+      
+      // Add each airport to the path and continue
+      airports.forEach(airport => {
+        currentPath.push(airport);
+        generatePaths(currentPath, segmentIndex + 1);
+        currentPath.pop(); // Backtrack
       });
-    }
+    };
+    
+    // Start generating paths
+    generatePaths();
+    
+    // For each valid path, generate all valid routes between consecutive airports
+    validPaths.forEach(path => {
+      for (let i = 0; i < path.length - 1; i++) {
+        const from = path[i];
+        const to = path[i + 1];
+        validRoutes.add(`${from}-${to}`);
+      }
+    });
+    
+    // For multi-segment paths (3+ segments), also consider "jumping" segments
+    // This handles cases like USA-DOH-SAS where flights can go directly from USA to SAS
+    validPaths.forEach(path => {
+      if (path.length >= 3) {
+        for (let i = 0; i < path.length - 2; i++) {
+          for (let j = i + 2; j < path.length; j++) {
+            // Create a route from airport i to airport j (skipping intermediate airports)
+            const from = path[i];
+            const to = path[j];
+            validRoutes.add(`${from}-${to}`);
+          }
+        }
+      }
+    });
     
     console.log('Current route segments:', routeSegments);
     console.log('Valid routes to match:', Array.from(validRoutes));
@@ -101,8 +151,71 @@ export default function useNormalFlightSearch() {
       const date = flight.date;
       const route = `${flight.originAirport}-${flight.destinationAirport}`;
       
-      // Only process if this route is in our valid routes set
-      if (validRoutes.has(route)) {
+      // Instead of special cases, we now properly handle all segment combinations
+      // by recursively expanding airport group codes in the path generation function above
+      
+      // Check if this route is in our valid routes set
+      const isInValidRoutes = validRoutes.has(route);
+      
+      // Helper function to check if an airport is in a segment group
+      const isAirportInSegment = (airport, segment) => {
+        // Direct match
+        if (segment === airport) return true;
+        
+        // Check if it's in the airport group
+        if (airportGroups[segment]) {
+          const airports = airportGroups[segment].split('/');
+          return airports.includes(airport);
+        }
+        
+        return false;
+      };
+      
+      // Check if this flight is part of a valid path
+      let isPartOfValidPath = false;
+      
+      // Check each valid path
+      for (const path of validPaths) {
+        // Check if origin and destination are both in the path and in the correct order
+        const originIndex = path.indexOf(flight.originAirport);
+        const destIndex = path.indexOf(flight.destinationAirport);
+        
+        if (originIndex !== -1 && destIndex !== -1 && originIndex < destIndex) {
+          isPartOfValidPath = true;
+          break;
+        }
+      }
+      
+      // Check if airports are in consecutive segments of the route
+      let isInConsecutiveSegments = false;
+      for (let i = 0; i < routeSegments.length - 1; i++) {
+        const fromSegment = routeSegments[i];
+        const toSegment = routeSegments[i + 1];
+        
+        if (isAirportInSegment(flight.originAirport, fromSegment) && 
+            isAirportInSegment(flight.destinationAirport, toSegment)) {
+          isInConsecutiveSegments = true;
+          break;
+        }
+      }
+      
+      // Also check for airports in non-consecutive segments
+      let isInNonConsecutiveSegments = false;
+      for (let i = 0; i < routeSegments.length; i++) {
+        for (let j = i + 2; j < routeSegments.length; j++) {
+          const fromSegment = routeSegments[i];
+          const toSegment = routeSegments[j];
+          
+          if (isAirportInSegment(flight.originAirport, fromSegment) && 
+              isAirportInSegment(flight.destinationAirport, toSegment)) {
+            isInNonConsecutiveSegments = true;
+            break;
+          }
+        }
+        if (isInNonConsecutiveSegments) break;
+      }
+      
+      if (isInValidRoutes || isPartOfValidPath || isInConsecutiveSegments || isInNonConsecutiveSegments) {
         if (!aggregatedData[date]) {
           aggregatedData[date] = {};
         }
