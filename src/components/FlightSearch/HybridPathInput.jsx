@@ -122,6 +122,66 @@ const HybridPathInput = ({ value, onChange, placeholder = 'Enter path (e.g. NRT/
     }, 0);
   };
 
+  // Handle select and add separator in one step
+  const handleSelectAndAddSeparator = (selectedValue, separator) => {
+    // First do the selection - similar to handleSelect but with some adjustments
+    let newValue = '';
+    
+    if (airportGroups[selectedValue]) {
+      // For groups, add the group code
+      const newSegments = [
+        ...completedSegments,
+        { 
+          type: 'airport', 
+          value: selectedValue,
+          expandedValue: airportGroups[selectedValue]
+        }
+      ];
+      
+      // Build the new value
+      newSegments.forEach(segment => {
+        newValue += segment.value;
+      });
+      
+      // Now add the separator
+      newValue += separator;
+      
+      // Add the separator to segments
+      newSegments.push({ type: 'separator', value: separator });
+      
+      setInputValue(newValue);
+      setDisplayValue('');
+      setCompletedSegments(newSegments);
+      setShowDropdown(false);
+      onChange?.(newValue);
+    } else {
+      // Regular airport selection
+      const newSegments = [
+        ...completedSegments, 
+        { type: 'airport', value: selectedValue },
+        { type: 'separator', value: separator }
+      ];
+      
+      // Build the new value
+      newSegments.forEach(segment => {
+        newValue += segment.value;
+      });
+      
+      setInputValue(newValue);
+      setDisplayValue('');
+      setCompletedSegments(newSegments);
+      setShowDropdown(false);
+      onChange?.(newValue);
+    }
+    
+    // Focus back on input
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 0);
+  };
+
   // Update completed segments when input changes
   useEffect(() => {
     const segments = [];
@@ -198,14 +258,17 @@ const HybridPathInput = ({ value, onChange, placeholder = 'Enter path (e.g. NRT/
       }
     } else if (['-', '/'].includes(e.key)) {
       e.preventDefault();
-      if (displayValue) {
-        // If there's text being typed, don't add separator
-        return;
+      
+      // If there's text being typed and there are suggestions, select the first one and add separator
+      if (displayValue && filteredOptions.length > 0) {
+        handleSelectAndAddSeparator(filteredOptions[0].value, e.key);
+      } else if (!displayValue) {
+        // Original behavior if no text is being typed
+        const separator = e.key;
+        let newValue = inputValue + separator;
+        setInputValue(newValue);
+        onChange?.(newValue);
       }
-      const separator = e.key;
-      let newValue = inputValue + separator;
-      setInputValue(newValue);
-      onChange?.(newValue);
     }
   };
 

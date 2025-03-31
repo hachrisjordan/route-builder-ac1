@@ -10,3 +10,4 @@
 node_modules/.cache/.eslintcache
 /node_modules/.cache
 gcp-mcp/
+/node_modules/.cache/default-development
