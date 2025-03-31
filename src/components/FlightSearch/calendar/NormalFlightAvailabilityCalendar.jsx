@@ -32,6 +32,7 @@ import {
 import { getSourceByCodename } from './data/sources';
 import airlines from './data/airlines_full';
 import { airportGroups, airportGroupDescriptions } from './data/airportGroups';
+import { airports } from './data/airports';
 
 const { Title } = Typography;
 
@@ -156,9 +157,46 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
     // Initialize sets to store unique airport codes
     const origins = new Set();
     const destinations = new Set();
+    const intermediates = new Set();
     
+    // Create a map of IATA codes to airport info for quick lookup
+    const airportMap = new Map(airports.map(airport => [airport.IATA, airport]));
+    
+    // Function to parse route input in format like "USA-DOH/AUH/DXB-HAN/SGN/TYO"
+    const parseRouteString = (routeString) => {
+      // Split by dash to get segments
+      const segments = routeString.split('-');
+      
+      if (segments.length >= 2) {
+        // First segment goes to origins only
+        const firstSegment = segments[0];
+        // Split by slash in case there are multiple airports/groups
+        firstSegment.split('/').forEach(code => origins.add(code));
+        
+        // Last segment goes to destinations only
+        const lastSegment = segments[segments.length - 1];
+        // Split by slash in case there are multiple airports/groups
+        lastSegment.split('/').forEach(code => destinations.add(code));
+        
+        // Intermediate segments go to both origins and destinations
+        if (segments.length > 2) {
+          for (let i = 1; i < segments.length - 1; i++) {
+            segments[i].split('/').forEach(code => {
+              intermediates.add(code);
+              origins.add(code);
+              destinations.add(code);
+            });
+          }
+        }
+      }
+    };
+    
+    // Parse the current route if it's a string
+    if (typeof currentRoute === 'string') {
+      parseRouteString(currentRoute);
+    } 
     // Extract airports from flight data
-    if (flightData?.data) {
+    else if (flightData?.data) {
       Object.values(flightData.data).forEach(dateData => {
         Object.keys(dateData).forEach(route => {
           if (isValidSegmentForRoute(route, currentRoute)) {
@@ -168,50 +206,79 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
           }
         });
       });
-    }
-    
-    // Add airport groups from the route (except the last one) to origins
-    const originGroups = [];
-    if (currentRoute && currentRoute.length > 0) {
-      for (let i = 0; i < currentRoute.length - 1; i++) {
-        originGroups.push({
-          code: currentRoute[i],
-          name: airportGroupDescriptions[currentRoute[i]] || currentRoute[i],
-          expanded: airportGroups[currentRoute[i]] || currentRoute[i],
-          isGroup: !!airportGroups[currentRoute[i]]
-        });
+      
+      // If currentRoute is an array, add appropriate entries
+      if (Array.isArray(currentRoute) && currentRoute.length > 0) {
+        // First segment goes to origins only
+        if (currentRoute.length > 0) {
+          origins.add(currentRoute[0]);
+        }
+        
+        // Last segment goes to destinations only
+        if (currentRoute.length > 1) {
+          destinations.add(currentRoute[currentRoute.length - 1]);
+        }
+        
+        // Intermediate segments go to both origins and destinations
+        if (currentRoute.length > 2) {
+          for (let i = 1; i < currentRoute.length - 1; i++) {
+            intermediates.add(currentRoute[i]);
+            origins.add(currentRoute[i]);
+            destinations.add(currentRoute[i]);
+          }
+        }
       }
     }
     
-    // Add airport groups from the route (except the first one) to destinations
-    const destGroups = [];
-    if (currentRoute && currentRoute.length > 0) {
-      for (let i = 1; i < currentRoute.length; i++) {
-        destGroups.push({
-          code: currentRoute[i],
-          name: airportGroupDescriptions[currentRoute[i]] || currentRoute[i],
-          expanded: airportGroups[currentRoute[i]] || currentRoute[i],
-          isGroup: !!airportGroups[currentRoute[i]]
-        });
-      }
-    }
+    // Create origin group options
+    const originGroups = Array.from(origins)
+      .filter(code => !!airportGroups[code])
+      .map(code => ({
+        code,
+        name: airportGroupDescriptions[code] || code,
+        expanded: airportGroups[code] || code,
+        isGroup: true,
+        isIntermediate: intermediates.has(code)
+      }));
     
-    // Convert sets to arrays of option objects
-    const originOptions = Array.from(origins).map(code => {
-      return {
-        code: code,
-        name: code, // We would need an airports array to get full name
-        isGroup: false
-      };
-    });
+    // Create destination group options
+    const destGroups = Array.from(destinations)
+      .filter(code => !!airportGroups[code])
+      .map(code => ({
+        code,
+        name: airportGroupDescriptions[code] || code,
+        expanded: airportGroups[code] || code,
+        isGroup: true,
+        isIntermediate: intermediates.has(code)
+      }));
     
-    const destOptions = Array.from(destinations).map(code => {
-      return {
-        code: code,
-        name: code, // We would need an airports array to get full name
-        isGroup: false
-      };
-    });
+    // Create individual airport options for origins
+    const originOptions = Array.from(origins)
+      .filter(code => !airportGroups[code])
+      .map(code => {
+        const airport = airportMap.get(code);
+        return {
+          code,
+          name: airport ? `${airport.Name} (${airport.Country})` : code,
+          iata: code,
+          isGroup: false,
+          isIntermediate: intermediates.has(code)
+        };
+      });
+    
+    // Create individual airport options for destinations
+    const destOptions = Array.from(destinations)
+      .filter(code => !airportGroups[code])
+      .map(code => {
+        const airport = airportMap.get(code);
+        return {
+          code,
+          name: airport ? `${airport.Name} (${airport.Country})` : code,
+          iata: code,
+          isGroup: false,
+          isIntermediate: intermediates.has(code)
+        };
+      });
     
     return {
       originOptions: [...originGroups, ...originOptions],
