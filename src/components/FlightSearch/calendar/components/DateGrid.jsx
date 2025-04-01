@@ -127,7 +127,8 @@ const DateGrid = ({
   goToPrevMonth,
   goToNextMonth,
   groupFilters,
-  segmentFilters
+  segmentFilters,
+  currencyFilter
 }) => {
   // Calendar calculations
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
@@ -244,6 +245,7 @@ const DateGrid = ({
                 classes={classFilter.length > 0 ? classFilter : ['Economy', 'Premium Economy', 'Business', 'First']}
                 groupFilters={groupFilters}
                 segmentFilters={segmentFilters}
+                currencyFilter={currencyFilter}
               />
             ))}
           </div>

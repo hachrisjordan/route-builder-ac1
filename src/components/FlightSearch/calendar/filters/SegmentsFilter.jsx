@@ -61,6 +61,11 @@ const SegmentsFilter = ({
   // Calculate how many segments were filtered out
   const invalidSegmentsCount = totalSegmentsCount ? (totalSegmentsCount - filteredSegments.length) : 0;
 
+  // Filter segments based on search text
+  const displaySegments = filteredSegments.filter(segment => 
+    segment.toLowerCase().includes(segmentSearchText.toLowerCase())
+  );
+
   return (
     <div style={{ 
       backgroundColor: 'white', 
@@ -122,7 +127,7 @@ const SegmentsFilter = ({
         >
           {filteredSegments.length === segmentFilter.segments.length
             ? 'Deselect All'
-            : 'Select All'} ({filteredSegments.length} segments)
+            : 'Select All'} ({displaySegments.length} segments)
         </Checkbox>
       </div>
       <div style={{ 
@@ -130,7 +135,7 @@ const SegmentsFilter = ({
         overflowY: 'auto',
         padding: '8px 0'
       }}>
-        {filteredSegments.map((segment, index) => (
+        {displaySegments.map((segment, index) => (
           <div 
             key={segment} 
             style={{ 
@@ -216,7 +221,7 @@ const SegmentsFilter = ({
             </Checkbox>
           </div>
         ))}
-        {filteredSegments.length === 0 && (
+        {displaySegments.length === 0 && (
           <div style={{ padding: '8px 12px', color: '#999', textAlign: 'center' }}>
             No valid segments found
           </div>

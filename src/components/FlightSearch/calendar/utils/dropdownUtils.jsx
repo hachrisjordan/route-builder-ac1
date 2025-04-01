@@ -426,19 +426,8 @@ export const renderDestDropdown = (filterId, groupFilters, setGroupFilters, dest
 export const renderSegmentsDropdownSimple = (filterId, segmentFilters, setSegmentFilters, segmentSearchText, setSegmentSearchText, uniqueSegments, currentRoute) => {
   const currentFilter = segmentFilters[filterId] || { segments: [] };
   
-  // Count total segments
-  const totalSegmentsCount = uniqueSegments.length;
-  
-  // Filter segments to only include valid routes for the current search
-  const validSegments = uniqueSegments.filter(segment => 
-    isValidSegmentForRoute(segment, currentRoute)
-  );
-  
-  // Count how many were filtered out
-  const invalidSegmentsCount = totalSegmentsCount - validSegments.length;
-  
-  // Then filter by search text
-  const filteredSegments = validSegments.filter(segment => 
+  // Filter segments based on search text
+  const displaySegments = uniqueSegments.filter(segment => 
     segment.toLowerCase().includes(segmentSearchText.toLowerCase())
   );
 
@@ -461,25 +450,12 @@ export const renderSegmentsDropdownSimple = (filterId, segmentFilters, setSegmen
         />
       </div>
       
-      {invalidSegmentsCount > 0 && (
-        <div style={{ 
-          padding: '4px 12px', 
-          fontSize: '11px', 
-          color: '#ff4d4f', 
-          backgroundColor: '#fff1f0',
-          marginBottom: '4px',
-          borderBottom: '1px solid #f0f0f0' 
-        }}>
-          {invalidSegmentsCount} invalid segment(s) hidden for current route
-        </div>
-      )}
-      
       <div style={{ 
         maxHeight: '400px', 
         overflowY: 'auto',
         padding: '8px 0'
       }}>
-        {filteredSegments.map(segment => (
+        {displaySegments.map(segment => (
           <div 
             key={segment} 
             style={{ 
@@ -506,7 +482,7 @@ export const renderSegmentsDropdownSimple = (filterId, segmentFilters, setSegmen
             </Checkbox>
           </div>
         ))}
-        {filteredSegments.length === 0 && (
+        {displaySegments.length === 0 && (
           <div style={{ padding: '8px 12px', color: '#999', textAlign: 'center' }}>
             No valid segments found
           </div>

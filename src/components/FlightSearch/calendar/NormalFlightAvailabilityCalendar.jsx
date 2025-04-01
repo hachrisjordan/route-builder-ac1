@@ -14,6 +14,7 @@ import AirlinesFilter from './filters/AirlinesFilter';
 import PointsFilter from './filters/PointsFilter';
 import DatesFilter from './filters/DatesFilter';
 import AdditionalFilter from './filters/AdditionalFilter';
+import OthersFilter from './filters/OthersFilter';
 
 // Utility functions
 import { formatDateForDisplay } from './utils/dateUtils';
@@ -446,25 +447,35 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
   const getUniqueSegments = () => {
     const segments = new Set();
     
-    // Always use the full dataset
-    if (flightData?.rawData) {
-      flightData.rawData.forEach(flight => {
-        const segment = flight.originAirport + '-' + flight.destinationAirport;
-        // Remove the isValidSegmentForRoute check to include all segments
-        segments.add(segment);
+    // First add all valid routes from the route generation
+    if (flightData?.routes) {
+      flightData.routes.forEach(route => {
+        segments.add(route);
       });
     }
     
-    // If we have data in the processed flightData.data format, include segments from there too
+    // Then add any segments from the raw flight data that match our valid routes
+    if (flightData?.rawData) {
+      flightData.rawData.forEach(flight => {
+        const segment = flight.originAirport + '-' + flight.destinationAirport;
+        if (flightData?.routes?.includes(segment)) {
+          segments.add(segment);
+        }
+      });
+    }
+    
+    // Finally add any segments from the processed data that match our valid routes
     if (flightData?.data) {
       Object.values(flightData.data).forEach(dateData => {
         Object.keys(dateData).forEach(segment => {
-          segments.add(segment);
+          if (flightData?.routes?.includes(segment)) {
+            segments.add(segment);
+          }
         });
       });
     }
     
-    return Array.from(segments);
+    return Array.from(segments).sort();
   };
   
   // Get all unique sources from flight data - always use full dataset
@@ -703,41 +714,19 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
 
   // Get ordered segments - use this for display
   const getOrderedSegments = () => {
-    // First filter to only include valid segments for the current route
-    const validSegments = uniqueSegments.filter(segment => 
-      isValidSegmentForRoute(segment, currentRoute)
-    );
-    
-    // Then filter based on search text
+    // Filter based on search text only
     const filteredBySearch = segmentSearchText
-      ? validSegments.filter(segment => segment.toLowerCase().includes(segmentSearchText.toLowerCase()))
-      : validSegments;
-      
-    // If we have a custom order, use it
+      ? uniqueSegments.filter(segment => segment.toLowerCase().includes(segmentSearchText.toLowerCase()))
+      : uniqueSegments;
+
+    // Apply ordering if available
     if (segmentOrder.length > 0) {
-      // Start with ordered segments that exist in filteredBySearch
-      const orderedSegments = segmentOrder.filter(segment => filteredBySearch.includes(segment));
-      
-      // Add any segments that aren't in the order yet
-      filteredBySearch.forEach(segment => {
-        if (!orderedSegments.includes(segment)) {
-          orderedSegments.push(segment);
-        }
-      });
-      
-      return orderedSegments;
+      const orderedSegments = [...segmentOrder];
+      const remainingSegments = filteredBySearch.filter(segment => !segmentOrder.includes(segment));
+      return [...orderedSegments, ...remainingSegments];
     }
-    
-    // Otherwise sort segments using the common comparison function
-    return [...filteredBySearch].sort((a, b) => {
-      // Try to use the defined comparison function for segments in the route
-      if (isValidSegmentForRoute(a, currentRoute) && isValidSegmentForRoute(b, currentRoute)) {
-        return compareSegments(a, b, currentRoute);
-      }
-      
-      // For segments not in the route, sort alphabetically
-      return a.localeCompare(b);
-    });
+
+    return filteredBySearch;
   };
   
   // Add the moveSegment function back:
@@ -922,6 +911,12 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
     });
   };
 
+  // Add currencyFilter state
+  const [currencyFilter, setCurrencyFilter] = useState({
+    enabled: false,
+    selectedCurrency: null
+  });
+
   return (
     <div style={{ fontFamily: 'Menlo, monospace' }}>
       <div style={{ 
@@ -1003,7 +998,11 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
             gap: '8px', 
             justifyContent: 'flex-start',
             flexWrap: 'wrap',
-            alignItems: 'center'
+            alignItems: 'center',
+            backgroundColor: '#ffffff',
+            padding: '8px',
+            borderRadius: '4px',
+            marginBottom: '12px'
           }}>
             {/* Direct only toggle */}
             <Checkbox 
@@ -1164,6 +1163,28 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
                 Sources {sourceFilter?.sources?.length > 0 && `(${sourceFilter.sources.length})`}
               </Button>
             </Dropdown>
+            
+            {/* Others filter */}
+            <Dropdown 
+              overlay={
+                <OthersFilter 
+                  currencyFilter={currencyFilter}
+                  setCurrencyFilter={setCurrencyFilter}
+                />
+              } 
+              trigger={['click']}
+            >
+              <Button 
+                type={currencyFilter.enabled ? "primary" : "default"}
+                size="small"
+                icon={<DownOutlined />}
+                style={{ 
+                  fontWeight: currencyFilter.enabled ? 600 : 400
+                }}
+              >
+                Others {currencyFilter.enabled && currencyFilter.selectedCurrency && `(${currencyFilter.selectedCurrency})`}
+              </Button>
+            </Dropdown>
           </div>
         </div>
         
@@ -1230,6 +1251,7 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
           goToNextMonth={goToNextMonth}
           groupFilters={groupFilters}
           segmentFilters={segmentFilters}
+          currencyFilter={currencyFilter}
         />
         
         <div style={{ marginTop: '24px', color: '#666', fontSize: '12px' }}>

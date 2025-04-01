@@ -1,6 +1,7 @@
 import { getSourceByCodename } from '../data/sources';
 import airlines from '../data/airlines_full';
 import { airportGroups, airportGroupDescriptions } from '../data/airportGroups';
+import { convertCurrency, formatCurrencyAmount } from './currencyUtils';
 
 // Sample raw response data for fallback
 export const sampleRawData = [
@@ -48,7 +49,7 @@ export const sampleRawData = [
 ];
 
 // Get enriched flight data with raw API information
-export const getEnrichedFlightData = (routeCode, classCode, dateString, classData, flightData) => {
+export const getEnrichedFlightData = (routeCode, classCode, dateString, classData, flightData, currencyFilter) => {
   // Handle missing or empty classData
   if (!classData) {
     return [];
@@ -78,7 +79,7 @@ export const getEnrichedFlightData = (routeCode, classCode, dateString, classDat
   // Check for raw data from the flightData prop
   const rawDataArray = flightData?.rawData || sampleRawData;
   
-  // Ensure raw data is available for each flight
+  // Process each flight
   return flights.map(flight => {
     // If rawData is already present, just return the flight
     if (flight.rawData) return flight;
@@ -240,4 +241,37 @@ export const sortSegments = (a, b, segmentOrder, currentRoute) => {
 export const getAirlineName = (codename) => {
   const source = getSourceByCodename(codename);
   return source ? `${source.airline} ${source.ffname}` : codename;
+};
+
+/**
+ * Format taxes with currency conversion if needed
+ * @param {number} amount - The tax amount
+ * @param {string} originalCurrency - The original currency code
+ * @param {Object} currencyFilter - The currency filter settings
+ * @param {boolean} useCurrencyCode - Whether to use currency code instead of symbol
+ * @returns {string} Formatted tax amount with currency
+ */
+export const formatTaxes = async (amount, originalCurrency, currencyFilter, useCurrencyCode = false) => {
+  try {
+    if (!amount || amount <= 0) return '';
+    
+    // If currency filter is enabled and a currency is selected
+    if (currencyFilter?.enabled && currencyFilter?.selectedCurrency) {
+      // Convert the amount to the selected currency
+      const convertedAmount = await convertCurrency(
+        amount,
+        originalCurrency,
+        currencyFilter.selectedCurrency
+      );
+      
+      // Format the converted amount with the selected currency
+      return formatCurrencyAmount(convertedAmount, currencyFilter.selectedCurrency, useCurrencyCode);
+    }
+    
+    // If no currency conversion, format with original currency
+    return formatCurrencyAmount(amount, originalCurrency, useCurrencyCode);
+  } catch (error) {
+    console.error('Error formatting taxes:', error);
+    return `${originalCurrency} ${amount.toFixed(2)}`;
+  }
 }; 

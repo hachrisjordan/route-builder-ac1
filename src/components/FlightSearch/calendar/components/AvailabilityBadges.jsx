@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { getEnrichedFlightData, getAirlineName } from '../utils/flightUtils';
-import { getSourceByCodename as getSourceByCodenameUtil } from '../data/sources';
+import { getEnrichedFlightData, getAirlineName, formatTaxes } from '../utils/flightUtils';
+import { getSourceByCodename } from '../data/sources';
 import airlines from '../data/airlines_full';
 import { applyGroupFilters, findApplicableGroupFilters } from '../utils/filterUtils';
+import { convertCurrency, formatCurrencyAmount } from '../utils/currencyUtils';
 
 // Static helper function to check if a route has any available badges
 export const hasAvailableBadges = (route, date, flightData, directFilter, sourceFilter, airlinesFilter, pointsFilter, classes, groupFilters, segmentFilters) => {
@@ -339,7 +340,8 @@ const AvailabilityBadges = ({
   pointsFilter,
   classes,
   groupFilters,
-  segmentFilters
+  segmentFilters,
+  currencyFilter
 }) => {
   // Ref to track active tooltip
   const activeTooltipRef = useRef(null);
@@ -363,11 +365,6 @@ const AvailabilityBadges = ({
     'Premium Economy': 'W',
     'Business': 'J',
     'First': 'F'
-  };
-  
-  // Get Source by codename
-  const getSourceByCodename = (codename) => {
-    return getSourceByCodenameUtil(codename);
   };
 
   // Get background color based on class code
@@ -477,7 +474,7 @@ const AvailabilityBadges = ({
     if (segmentFilters && Object.keys(segmentFilters).length > 0) {
       // Check if any segment filter applies to this route (defines scope)
       let hasApplicableSegmentFilter = false;
-      
+  
       // Check if this route is in the scope of any segment filter
       Object.entries(segmentFilters).forEach(([filterId, filter]) => {
         if (!filter || !filter.segments || !Array.isArray(filter.segments)) return;
@@ -695,104 +692,25 @@ const AvailabilityBadges = ({
   
   // Check if a class is available
   const shouldShowAsAvailable = (classCode) => {
-    if (!flightData || !flightData.data || !flightData.data[date] || 
-        !flightData.data[date][route] || !flightData.data[date][route].classes) {
-      return false;
-    }
+    // Skip if no flight data
+    if (!flightData?.data?.[date]?.[route]?.classes?.[classCode]) return false;
     
     const classData = flightData.data[date][route].classes[classCode];
     
-    // Quick check if class data exists and is available
-    if (!classData || !classData.available) {
-      return false;
-    }
+    // Skip if not available
+    if (!classData || !classData.available) return false;
     
-    // If direct filter is on, check for direct
-    if (directFilter && !classData.direct) {
-      return false;
-    }
+    // Skip if direct filter is on and this class doesn't have direct flights
+    if (directFilter && !classData.direct) return false;
     
-    // Check if there are any applicable group filters
-    const hasApplicableGroupFilters = groupFilters && 
-                                     Object.keys(groupFilters).length > 0 && 
-                                     findApplicableGroupFilters(route, groupFilters).length > 0;
+    // Get enriched flight data
+    const flights = getEnrichedFlightData(route, classCode, date, classData, flightData);
     
-    // Find applicable segment filters for this route
-    let applicableSegmentFilters = [];
-    if (segmentFilters && Object.keys(segmentFilters).length > 0) {
-      applicableSegmentFilters = Object.entries(segmentFilters)
-        .filter(([_, filter]) => {
-          if (!filter || !filter.segments || !Array.isArray(filter.segments)) return false;
-          
-          // Check if this route is in the segments list for this filter
-          const isInSegments = filter.segments.includes(route);
-          const mode = filter.mode || 'include';
-          
-          // This filter is applicable if the route is in its scope
-          return (mode === 'include' && isInSegments) || (mode === 'exclude' && !isInSegments);
-        })
-        .filter(([_, filter]) => {
-          // Check if this filter has any actual filtering criteria beyond segment selection
-          return filter.directFilter === true || 
-                 (filter.classFilter && filter.classFilter.length > 0) ||
-                 (filter.sourceFilter && filter.sourceFilter.sources && filter.sourceFilter.sources.length > 0) ||
-                 (filter.airlinesFilter && filter.airlinesFilter.airlines && filter.airlinesFilter.airlines.length > 0) ||
-                 (filter.pointsFilter && filter.pointsFilter.length === 2);
-        });
-    }
+    // Apply all filters and check if any flights remain
+    const filteredFlights = getFlightsForClassWithFilters(classCode, flights);
     
-    // Apply segment filter criteria if applicable
-    if (applicableSegmentFilters.length > 0) {
-      // Check each applicable segment filter
-      for (const [_, filter] of applicableSegmentFilters) {
-        // Apply direct filter if specified
-        if (filter.directFilter && !classData.direct) {
-          return false;
-        }
-        
-        // Apply class filter if specified
-        if (filter.classFilter && Array.isArray(filter.classFilter) && filter.classFilter.length > 0) {
-          const classMapping = {
-            'Economy': 'Y',
-            'Premium Economy': 'W',
-            'Business': 'J',
-            'First': 'F'
-          };
-          
-          // Convert class names to codes
-          const classCodes = filter.classFilter.map(cls => classMapping[cls]).filter(Boolean);
-          
-          // If this class isn't in the filter, it's not available
-          if (!classCodes.includes(classCode)) {
-            return false;
-          }
-        }
-        
-        // For source, airlines, and points filters, we'll need to check individual flights
-        // We'll delegate this to getFlightsForClassWithFilters
-        const flights = getFlightsForClassWithFilters(classCode);
-        
-        if (flights.length === 0) {
-          return false;
-        }
-      }
-    }
-    
-    // Check source, airlines, and points filters
-    if ((sourceFilter && sourceFilter.sources.length > 0) || 
-        (airlinesFilter && airlinesFilter.airlines.length > 0) || 
-        pointsFilter) {
-      // Get flights after applying these filters
-      const flights = getFlightsForClassWithFilters(classCode);
-      
-      // If no flights pass the filters, the class isn't available
-      if (flights.length === 0) {
-        return false;
-      }
-    }
-    
-    // If we reach here, the class is available after all filters
-    return true;
+    // Return true only if there are flights remaining after all filters
+    return filteredFlights.length > 0;
   };
   
   // Get sources for a class
@@ -1193,8 +1111,23 @@ const AvailabilityBadges = ({
           taxesSpan.style.color = '#666';
           
           if (totalTaxes && parseInt(totalTaxes, 10) > 0) {
+            // Format taxes with currency conversion if enabled
+            const formatTaxesAndDisplay = async () => {
+              try {
+                const formattedTaxes = await formatTaxes(
+                  parseInt(totalTaxes, 10) / 100,
+                  currency,
+                  currencyFilter,
+                  true // Add parameter to use currency code instead of symbol
+                );
+                taxesSpan.textContent = `+ ${formattedTaxes}`;
+              } catch (error) {
+                console.error('Error formatting taxes:', error);
             const formattedTaxes = (parseInt(totalTaxes, 10) / 100).toFixed(2);
             taxesSpan.textContent = `+ ${currency} ${formattedTaxes}`;
+              }
+            };
+            formatTaxesAndDisplay();
           } else {
             taxesSpan.textContent = 'Taxes and fees are not available';
             taxesSpan.style.fontStyle = 'italic';
@@ -1272,7 +1205,7 @@ const AvailabilityBadges = ({
     <div style={{ marginBottom: '4px' }}>
       <div style={{ 
         display: 'flex', 
-        alignItems: 'center',
+        alignItems: 'center', 
         justifyContent: 'space-between',
         gap: '8px' 
       }}>
