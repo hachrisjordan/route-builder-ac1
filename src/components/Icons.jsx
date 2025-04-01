@@ -108,4 +108,23 @@ export const RouteIcon = ({ className }) => (
     <path d="M4 9l8 8" />
     <path d="M20 9l-8 8" />
   </svg>
+);
+
+export const ColorPickerIcon = ({ className, color = 'currentColor' }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke={color}
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+    width="24"
+    height="24"
+  >
+    <circle cx="12" cy="12" r="10" fill={color} strokeWidth="1.5" />
+    <path d="M12 2v20M2 12h20" stroke="white" strokeWidth="1" />
+    <path d="M17 12a5 5 0 0 1-10 0" stroke="white" strokeWidth="1" />
+  </svg>
 ); 

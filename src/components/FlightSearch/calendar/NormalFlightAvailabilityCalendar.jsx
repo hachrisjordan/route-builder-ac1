@@ -50,7 +50,8 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
   // Segment filter state
   const [segmentFilter, setSegmentFilter] = useState({
     mode: 'include',
-    segments: []
+    segments: [],
+    colors: {} // Map of segment -> color
   });
   const [segmentSearchText, setSegmentSearchText] = useState('');
   // Add segment order state to control the display order
@@ -703,6 +704,7 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
 
   // Get ordered segments - use this for display
   const getOrderedSegments = () => {
+<<<<<<< Updated upstream
     // First filter to only include valid segments for the current route
     const validSegments = uniqueSegments.filter(segment => 
       isValidSegmentForRoute(segment, currentRoute)
@@ -726,6 +728,29 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
       });
       
       return orderedSegments;
+=======
+    // Get segments that appear in processedFlights
+    const activeSegments = new Set();
+    Object.values(processedFlights).forEach(dateData => {
+      Object.keys(dateData).forEach(segment => {
+        activeSegments.add(segment);
+      });
+    });
+
+    // Filter uniqueSegments to only include active segments
+    const availableSegments = uniqueSegments.filter(segment => activeSegments.has(segment));
+
+    // Filter based on search text
+    const filteredBySearch = segmentSearchText
+      ? availableSegments.filter(segment => segment.toLowerCase().includes(segmentSearchText.toLowerCase()))
+      : availableSegments;
+
+    // Apply ordering if available
+    if (segmentOrder.length > 0) {
+      const orderedSegments = [...segmentOrder].filter(segment => activeSegments.has(segment));
+      const remainingSegments = filteredBySearch.filter(segment => !orderedSegments.includes(segment));
+      return [...orderedSegments, ...remainingSegments];
+>>>>>>> Stashed changes
     }
     
     // Otherwise sort segments using the common comparison function
@@ -1230,6 +1255,11 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
           goToNextMonth={goToNextMonth}
           groupFilters={groupFilters}
           segmentFilters={segmentFilters}
+<<<<<<< Updated upstream
+=======
+          currencyFilter={currencyFilter}
+          segmentFilter={segmentFilter}
+>>>>>>> Stashed changes
         />
         
         <div style={{ marginTop: '24px', color: '#666', fontSize: '12px' }}>

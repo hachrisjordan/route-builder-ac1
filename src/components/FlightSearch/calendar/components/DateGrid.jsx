@@ -127,7 +127,13 @@ const DateGrid = ({
   goToPrevMonth,
   goToNextMonth,
   groupFilters,
+<<<<<<< Updated upstream
   segmentFilters
+=======
+  segmentFilters,
+  currencyFilter,
+  segmentFilter
+>>>>>>> Stashed changes
 }) => {
   // Calendar calculations
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
@@ -232,8 +238,9 @@ const DateGrid = ({
           <div style={{ minHeight: '80px' }}>
             {/* Show paginated availability badges for this date */}
             {paginatedRoutes.map(route => (
-              <AvailabilityBadges
+              <div
                 key={route}
+<<<<<<< Updated upstream
                 route={route}
                 date={dateString}
                 flightData={flightData}
@@ -245,6 +252,31 @@ const DateGrid = ({
                 groupFilters={groupFilters}
                 segmentFilters={segmentFilters}
               />
+=======
+                style={{
+                  backgroundColor: segmentFilter?.colors?.[route] || 'transparent',
+                  borderRadius: '4px',
+                  marginBottom: '4px',
+                  padding: '4px',
+                  fontSize: '16px'
+                }}
+              >
+                <AvailabilityBadges
+                  key={route}
+                  route={route}
+                  date={dateString}
+                  flightData={flightData}
+                  directFilter={directFilter}
+                  sourceFilter={sourceFilter}
+                  airlinesFilter={airlinesFilter}
+                  pointsFilter={pointsFilter}
+                  classes={classFilter.length > 0 ? classFilter : ['Economy', 'Premium Economy', 'Business', 'First']}
+                  groupFilters={groupFilters}
+                  segmentFilters={segmentFilters}
+                  currencyFilter={currencyFilter}
+                />
+              </div>
+>>>>>>> Stashed changes
             ))}
           </div>
         ) : (
@@ -262,60 +294,38 @@ const DateGrid = ({
           </div>
         )}
         
-        {/* Render pagination controls if we have multiple pages (now positioned at the bottom) */}
+        {/* Render pagination controls if we have multiple pages */}
         {needsPagination && (
           <div style={{ 
             display: 'flex', 
-            justifyContent: 'center',
+            justifyContent: 'space-between',
             marginTop: '8px',
-            gap: '2px'
+            gap: '4px'
           }}>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent click from propagating to date cell
-                handlePageChange(dateString, 'prev', e);
-              }}
+            <Button
+              size="small"
               disabled={currentPage === 0}
-              style={{ 
-                border: 'none', 
-                background: 'none',
-                cursor: currentPage === 0 ? 'default' : 'pointer',
-                color: currentPage === 0 ? '#ddd' : '#666',
-                padding: '0 2px',
-                display: 'flex',
-                alignItems: 'center',
-                fontSize: '10px'
-              }}
+              onClick={(e) => handlePageChange(dateString, 'prev', e)}
+              style={{ flex: 1, padding: '0 4px' }}
             >
-              <LeftOutlined />
-            </button>
+              &larr;
+            </Button>
             <span style={{ 
-              fontSize: '10px', 
-              color: '#666', 
-              display: 'flex', 
-              alignItems: 'center' 
+              fontSize: '11px',
+              color: '#666',
+              display: 'flex',
+              alignItems: 'center'
             }}>
               {currentPage + 1}/{totalPages}
             </span>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent click from propagating to date cell
-                handlePageChange(dateString, 'next', e);
-              }}
+            <Button
+              size="small"
               disabled={currentPage >= totalPages - 1}
-              style={{ 
-                border: 'none', 
-                background: 'none',
-                cursor: currentPage >= totalPages - 1 ? 'default' : 'pointer',
-                color: currentPage >= totalPages - 1 ? '#ddd' : '#666',
-                padding: '0 2px',
-                display: 'flex',
-                alignItems: 'center',
-                fontSize: '10px'
-              }}
+              onClick={(e) => handlePageChange(dateString, 'next', e)}
+              style={{ flex: 1, padding: '0 4px' }}
             >
-              <RightOutlined />
-            </button>
+              &rarr;
+            </Button>
           </div>
         )}
       </div>

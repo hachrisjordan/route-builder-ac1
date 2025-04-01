@@ -1,6 +1,7 @@
 import React from 'react';
 import { Radio, Input, Checkbox } from 'antd';
 import { MenuOutlined } from '@ant-design/icons';
+import ColorPicker from '../../../ColorPicker';
 
 const SegmentsFilter = ({
   segmentFilter,
@@ -12,6 +13,17 @@ const SegmentsFilter = ({
   filteredSegments,
   totalSegmentsCount
 }) => {
+  // Function to handle color change
+  const handleColorChange = (segment, color) => {
+    setSegmentFilter(prev => ({
+      ...prev,
+      colors: {
+        ...prev.colors,
+        [segment]: color
+      }
+    }));
+  };
+
   // Function to handle drag end and reordering
   const handleDragEnd = (result) => {
     // Dropped outside the list
@@ -138,7 +150,7 @@ const SegmentsFilter = ({
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: 'white',
+              backgroundColor: segmentFilter.colors[segment] || 'white',
               borderBottom: '1px solid #f9f9f9',
               '&:hover': {
                 backgroundColor: '#f5f5f5'
@@ -152,7 +164,7 @@ const SegmentsFilter = ({
             }}
             onDragEnd={(e) => {
               e.currentTarget.style.opacity = '1';
-              e.currentTarget.style.backgroundColor = 'white';
+              e.currentTarget.style.backgroundColor = segmentFilter.colors[segment] || 'white';
             }}
             onDragOver={(e) => {
               e.preventDefault();
@@ -160,30 +172,6 @@ const SegmentsFilter = ({
             }}
             onDragLeave={(e) => {
               e.currentTarget.style.borderTop = '1px solid #f9f9f9';
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.currentTarget.style.borderTop = '1px solid #f9f9f9';
-              
-              const draggedSegment = e.dataTransfer.getData('text/plain');
-              if (draggedSegment === segment) return; // Same segment, no change
-              
-              // Get current ordered segments or initialize with filtered segments
-              const currentOrder = segmentOrder.length > 0 
-                ? [...segmentOrder] 
-                : filteredSegments;
-              
-              const sourceIndex = currentOrder.indexOf(draggedSegment);
-              const targetIndex = currentOrder.indexOf(segment);
-              
-              if (sourceIndex === -1 || targetIndex === -1) return;
-              
-              // Create new array with reordered segments
-              const newOrder = [...currentOrder];
-              newOrder.splice(sourceIndex, 1);
-              newOrder.splice(targetIndex, 0, draggedSegment);
-              
-              setSegmentOrder(newOrder);
             }}
           >
             <div
@@ -214,6 +202,11 @@ const SegmentsFilter = ({
             >
               {segment}
             </Checkbox>
+            <ColorPicker
+              value={segmentFilter.colors[segment] || '#ffffff'}
+              onChange={(color) => handleColorChange(segment, color)}
+              size="small"
+            />
           </div>
         ))}
         {filteredSegments.length === 0 && (

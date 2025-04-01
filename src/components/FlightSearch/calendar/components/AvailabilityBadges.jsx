@@ -1277,7 +1277,7 @@ const AvailabilityBadges = ({
         gap: '8px' 
       }}>
         <div style={{ 
-          fontSize: '12px', 
+          fontSize: '16px', 
           fontWeight: 500,
           minWidth: '60px'
         }}>
