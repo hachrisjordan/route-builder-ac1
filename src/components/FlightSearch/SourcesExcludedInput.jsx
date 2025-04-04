@@ -1,9 +1,11 @@
-import React from 'react';
-import { Select, Tag } from 'antd';
+import React, { useState } from 'react';
+import { Select, Tag, Radio } from 'antd';
 import { sources } from './data/sources';
 import './SourcesExcludedInput.css';
 
-const SourcesExcludedInput = ({ value = [], onChange }) => {
+const SourcesInput = ({ value = [], onChange, defaultMode = 'include' }) => {
+  const [mode, setMode] = useState(defaultMode);
+
   // Convert sources array to options format for Select
   const sourceOptions = sources.map(source => ({
     value: source.codename,
@@ -35,7 +37,14 @@ const SourcesExcludedInput = ({ value = [], onChange }) => {
   }));
 
   const handleChange = (selectedValues) => {
-    onChange?.(selectedValues);
+    onChange?.({ mode, sources: selectedValues });
+  };
+
+  const handleModeChange = (e) => {
+    const newMode = e.target.value;
+    setMode(newMode);
+    // Update parent with current selection and new mode
+    onChange?.({ mode: newMode, sources: value });
   };
 
   // Custom filter function to match AC Route Builder behavior
@@ -99,7 +108,7 @@ const SourcesExcludedInput = ({ value = [], onChange }) => {
       mode="multiple"
       allowClear
       style={{ width: '100%' }}
-      placeholder="Select airlines to exclude"
+      placeholder={`Select airlines to ${mode}`}
       value={value}
       onChange={handleChange}
       options={sourceOptions}
@@ -109,6 +118,43 @@ const SourcesExcludedInput = ({ value = [], onChange }) => {
       listHeight={400}
       virtual={false}
       menuItemSelectedIcon={null}
+      dropdownRender={(menu) => (
+        <div>
+          <div style={{ 
+            padding: '8px', 
+            borderBottom: '1px solid #f0f0f0'
+          }}>
+            <Radio.Group
+              value={mode}
+              onChange={handleModeChange}
+              style={{ 
+                display: 'flex', 
+                gap: '8px'
+              }}
+            >
+              <Radio.Button 
+                value="include" 
+                style={{ 
+                  flex: 1, 
+                  textAlign: 'center'
+                }}
+              >
+                Include
+              </Radio.Button>
+              <Radio.Button 
+                value="exclude" 
+                style={{ 
+                  flex: 1, 
+                  textAlign: 'center'
+                }}
+              >
+                Exclude
+              </Radio.Button>
+            </Radio.Group>
+          </div>
+          {menu}
+        </div>
+      )}
       tagRender={(props) => {
         const { label, value, closable, onClose } = props;
         const source = sources.find(s => s.codename === value);
@@ -150,7 +196,7 @@ const SourcesExcludedInput = ({ value = [], onChange }) => {
       }}
       dropdownStyle={{ 
         maxHeight: 400,
-        padding: '8px 0',
+        padding: '0',
         boxShadow: '0 3px 6px -4px rgba(0,0,0,.12), 0 6px 16px 0 rgba(0,0,0,.08), 0 9px 28px 8px rgba(0,0,0,.05)',
         borderRadius: '8px',
         zIndex: 1050,
@@ -162,4 +208,4 @@ const SourcesExcludedInput = ({ value = [], onChange }) => {
   );
 };
 
-export default SourcesExcludedInput; 
+export default SourcesInput; 

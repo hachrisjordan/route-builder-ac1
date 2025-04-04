@@ -4,7 +4,6 @@
   "private": true,
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
-    "@popperjs/core": "^2.11.8",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^14.1.2",
@@ -18,7 +17,6 @@
     "react-router-dom": "^7.2.0",
     "react-scripts": "5.0.1",
     "react-select": "^5.10.0",
-    "tippy.js": "^6.3.7",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
@@ -46,7 +44,6 @@
     ]
   },
   "devDependencies": {
-    "babel-loader": "^10.0.0",
     "eslint": "^8.57.1",
     "eslint-config-react-app": "^7.0.1"
   }

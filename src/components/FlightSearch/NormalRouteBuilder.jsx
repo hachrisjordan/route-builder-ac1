@@ -3,7 +3,7 @@ import { Card, Input, DatePicker, Button, Space, Row, Col } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import HybridPathInput from './HybridPathInput';
-import SourcesExcludedInput from './SourcesExcludedInput';
+import SourcesInput from './SourcesExcludedInput';
 import NormalFlightAvailabilityCalendar from './NormalFlightAvailabilityCalendar';
 import './styles/NormalRouteBuilder.css';
 
@@ -11,11 +11,12 @@ const { RangePicker } = DatePicker;
 
 const NormalRouteBuilder = ({ onSearch, isLoading, errors, cachedApiKey, saveApiKey }) => {
   const [path, setPath] = useState('');
-  const [sourcesExcluded, setSourcesExcluded] = useState([]);
+  const [sourcesState, setSourcesState] = useState({ mode: 'include', sources: [] });
   const [apiKey, setApiKey] = useState('');
   const [dateRange, setDateRange] = useState(null);
   const [flightData, setFlightData] = useState(null);
   const [currentRoute, setCurrentRoute] = useState([]);
+  const [selectedDateRange, setSelectedDateRange] = useState(null);
 
   // Load the cached API key when the component mounts
   useEffect(() => {
@@ -31,6 +32,11 @@ const NormalRouteBuilder = ({ onSearch, isLoading, errors, cachedApiKey, saveApi
     saveApiKey(newApiKey);
   };
 
+  const handleDateRangeSelect = (range) => {
+    setSelectedDateRange(range);
+    setDateRange([dayjs(range[0]), dayjs(range[1])]);
+  };
+
   const handleSearch = () => {
     if (!path) {
       return;
@@ -44,7 +50,7 @@ const NormalRouteBuilder = ({ onSearch, isLoading, errors, cachedApiKey, saveApi
 
     onSearch({
       path,
-      sourcesExcluded,
+      sourcesState,
       apiKey,
       dateRange: dateRange ? [dateRange[0].format('YYYY-MM-DD'), dateRange[1].format('YYYY-MM-DD')] : null
     });
@@ -66,13 +72,14 @@ const NormalRouteBuilder = ({ onSearch, isLoading, errors, cachedApiKey, saveApi
             </div>
           </Col>
 
-          {/* Sources Excluded */}
+          {/* Sources Input */}
           <Col flex="1">
             <div className="form-item">
-              <div className="element-label">Sources Excluded:</div>
-              <SourcesExcludedInput
-                value={sourcesExcluded}
-                onChange={setSourcesExcluded}
+              <div className="element-label">Sources:</div>
+              <SourcesInput
+                value={sourcesState.sources}
+                onChange={setSourcesState}
+                defaultMode={sourcesState.mode}
               />
             </div>
           </Col>
@@ -117,23 +124,20 @@ const NormalRouteBuilder = ({ onSearch, isLoading, errors, cachedApiKey, saveApi
         </Row>
         
         {/* Error messages */}
-        {errors && errors.path && (
-          <div style={{ color: 'red', marginTop: '8px' }}>{errors.path}</div>
-        )}
-        {errors && errors.general && (
-          <div style={{ color: 'red', marginTop: '8px' }}>{errors.general}</div>
-        )}
+        {errors && Object.entries(errors).map(([key, error]) => (
+          <div key={key} style={{ color: 'red', marginTop: '8px' }}>
+            {error}
+          </div>
+        ))}
       </Card>
 
-      {flightData && (
-        <Card style={{ marginTop: '24px' }}>
-          <NormalFlightAvailabilityCalendar
-            flightData={flightData}
-            currentRoute={currentRoute}
-            onDateRangeSelect={(range) => setDateRange([dayjs(range[0]), dayjs(range[1])])}
-            selectedRange={dateRange}
-          />
-        </Card>
+      {flightData && currentRoute && (
+        <NormalFlightAvailabilityCalendar
+          flightData={flightData}
+          currentRoute={currentRoute}
+          onDateRangeSelect={handleDateRangeSelect}
+          selectedRange={selectedDateRange}
+        />
       )}
     </>
   );

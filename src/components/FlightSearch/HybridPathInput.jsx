@@ -36,148 +36,18 @@ const HybridPathInput = ({ value, onChange, placeholder = 'Enter path (e.g. NRT/
     const searchText = currentSearch.toUpperCase();
     const value = option.value;
     
-    // If search text is more than 3 characters, search descriptions for groups and names for airports
-    if (searchText.length > 3) {
-      if (option.isGroup) {
-        // For groups, check code or if description contains the search text
-        const description = option.label.toUpperCase();
-        return value === searchText || 
-               value.startsWith(searchText) || 
-               description.includes(searchText);
-      } else {
-        // For airports, search name, country, etc.
-        // Extract airport name and city from the label which has format "IATA - Name (Country)"
-        const fullLabel = option.label.toUpperCase();
-        const nameParts = option.label.split(' - ')[1]?.split(' (')[0] || '';
-        const airportName = nameParts.toUpperCase();
-        
-        // Also search in country names for international searches
-        const country = option.label.match(/\(([^)]+)\)/)?.[1]?.toUpperCase() || '';
-        
-        // Check if any part matches - IATA, name or country
-        return value.startsWith(searchText) || 
-               airportName.includes(searchText) || 
-               country.includes(searchText) ||
-               fullLabel.includes(searchText);
-      }
-    } else {
-      // For 1-3 characters, only match by code (starts with)
-      // For airport groups, only show exact matches or starts with
-      if (option.isGroup) {
-        return value === searchText || value.startsWith(searchText);
-      }
-      
-      // For airports, match by IATA code
-      return value.startsWith(searchText);
+    // For airport groups, only show exact matches or starts with
+    if (option.isGroup) {
+      return value === searchText || value.startsWith(searchText);
     }
-  }).sort((a, b) => {
-    const searchUpper = currentSearch.toUpperCase();
     
-    // For longer searches (airport name search)
-    if (searchUpper.length > 3) {
-      // Check for exact IATA matches first
-      if (a.value === searchUpper) return -1;
-      if (b.value === searchUpper) return 1;
-      
-      // Then prioritize starts with IATA code
-      if (a.value.startsWith(searchUpper) && !b.value.startsWith(searchUpper)) return -1;
-      if (!a.value.startsWith(searchUpper) && b.value.startsWith(searchUpper)) return 1;
-      
-      // For airport groups, prioritize description matches
-      if (a.isGroup && b.isGroup) {
-        // Both are groups, compare their descriptions
-        const aDesc = a.label.toUpperCase();
-        const bDesc = b.label.toUpperCase();
-        
-        // Group description starts with search
-        const descStartsWithSearch = (desc) => desc.startsWith(searchUpper);
-        if (descStartsWithSearch(aDesc) && !descStartsWithSearch(bDesc)) return -1;
-        if (!descStartsWithSearch(aDesc) && descStartsWithSearch(bDesc)) return 1;
-        
-        // Group description contains search
-        const descContainsSearch = (desc) => desc.includes(searchUpper) && !desc.startsWith(searchUpper);
-        if (descContainsSearch(aDesc) && !descContainsSearch(bDesc)) return -1;
-        if (!descContainsSearch(aDesc) && descContainsSearch(bDesc)) return 1;
-        
-        // If both match in the same way, sort alphabetically
-        return aDesc.localeCompare(bDesc);
-      } 
-      // If one is a group and one is an airport
-      else if (a.isGroup && !b.isGroup) {
-        // Check if group description starts with or contains the search
-        const aDesc = a.label.toUpperCase();
-        if (aDesc.includes(searchUpper)) return -1;
-        
-        // Extract airport name info for comparison
-        const getAirportInfo = (option) => {
-          const parts = option.label.split(' - ');
-          const nameParts = parts[1]?.split(' (') || [''];
-          const name = nameParts[0]?.toUpperCase() || '';
-          return { name };
-        };
-        
-        const bInfo = getAirportInfo(b);
-        if (bInfo.name.startsWith(searchUpper)) return 1; // Prioritize exact airport name match
-        
-        return -1; // Otherwise, groups first
-      } 
-      else if (!a.isGroup && b.isGroup) {
-        // Check if group description starts with or contains the search
-        const bDesc = b.label.toUpperCase();
-        if (bDesc.includes(searchUpper)) return 1;
-        
-        // Extract airport name info for comparison
-        const getAirportInfo = (option) => {
-          const parts = option.label.split(' - ');
-          const nameParts = parts[1]?.split(' (') || [''];
-          const name = nameParts[0]?.toUpperCase() || '';
-          return { name };
-        };
-        
-        const aInfo = getAirportInfo(a);
-        if (aInfo.name.startsWith(searchUpper)) return -1; // Prioritize exact airport name match
-        
-        return 1; // Otherwise, groups first
-      }
-      
-      // For regular airports
-      // Extract airport names and other info
-      const getAirportInfo = (option) => {
-        const parts = option.label.split(' - ');
-        const nameParts = parts[1]?.split(' (') || [''];
-        const name = nameParts[0]?.toUpperCase() || '';
-        const country = option.label.match(/\(([^)]+)\)/)?.[1]?.toUpperCase() || '';
-        return { name, country, iata: option.value };
-      };
-      
-      const aInfo = getAirportInfo(a);
-      const bInfo = getAirportInfo(b);
-      
-      // Prioritize major airports (typically 3-letter IATA codes vs 4-letter codes)
-      if (a.value.length === 3 && b.value.length > 3) return -1;
-      if (a.value.length > 3 && b.value.length === 3) return 1;
-      
-      // Then check for airport name starts with search
-      const nameStartsWithSearch = (info) => info.name.startsWith(searchUpper);
-      if (nameStartsWithSearch(aInfo) && !nameStartsWithSearch(bInfo)) return -1;
-      if (!nameStartsWithSearch(aInfo) && nameStartsWithSearch(bInfo)) return 1;
-      
-      // Then check for name contains search
-      const nameContainsSearch = (info) => 
-        info.name.includes(searchUpper) && !info.name.startsWith(searchUpper);
-      if (nameContainsSearch(aInfo) && !nameContainsSearch(bInfo)) return -1;
-      if (!nameContainsSearch(aInfo) && nameContainsSearch(bInfo)) return 1;
-      
-      // Check for country matches
-      const countryMatches = (info) => info.country.includes(searchUpper);
-      if (countryMatches(aInfo) && !countryMatches(bInfo)) return -1;
-      if (!countryMatches(aInfo) && countryMatches(bInfo)) return 1;
-    } else {
-      // For short searches (IATA code search)
-      // Sort exact matches first
-      if (a.value === searchUpper) return -1;
-      if (b.value === searchUpper) return 1;
-    }
+    // For airports, must start with the search text
+    return value.startsWith(searchText);
+  }).sort((a, b) => {
+    // Sort exact matches first
+    const searchUpper = currentSearch.toUpperCase();
+    if (a.value === searchUpper) return -1;
+    if (b.value === searchUpper) return 1;
     
     // Then sort groups before individual airports
     if (a.isGroup && !b.isGroup) return -1;
