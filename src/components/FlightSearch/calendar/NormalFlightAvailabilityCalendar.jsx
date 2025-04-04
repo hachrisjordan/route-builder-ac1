@@ -680,7 +680,12 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
       return [...orderedSegments, ...remainingSegments];
     }
 
-    return filteredBySearch;
+    // Sort segments using our sorting logic
+    return [...filteredBySearch].sort((a, b) => {
+      const [originA, destA] = a.split('-');
+      const [originB, destB] = b.split('-');
+      return sortSegments(originA, destA, originB, destB, currentRoute);
+    });
   };
   
   // Add the moveSegment function back:
@@ -1207,6 +1212,7 @@ const NormalFlightAvailabilityCalendar = ({ flightData, currentRoute, onDateRang
           segmentFilters={segmentFilters}
           currencyFilter={currencyFilter}
           currentRoute={currentRoute}
+          segmentOrder={segmentOrder}
         />
         
         <div style={{ marginTop: '24px', color: '#666', fontSize: '12px' }}>

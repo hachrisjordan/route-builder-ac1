@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from 'antd';
 import { LeftOutlined, RightOutlined, LoadingOutlined } from '@ant-design/icons';
 import AvailabilityBadges, { hasAvailableBadges } from './AvailabilityBadges';
+import { sortSegments } from '../utils/flightUtils';
 
 // Define date utilities directly in this file to avoid import issues
 const monthNames = [
@@ -129,7 +130,8 @@ const DateGrid = ({
   groupFilters,
   segmentFilters,
   currencyFilter,
-  currentRoute
+  currentRoute,
+  segmentOrder
 }) => {
   // Calendar calculations
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
@@ -173,15 +175,16 @@ const DateGrid = ({
         )
       );
       
-      console.log('[DEBUG] After filtering, routes remaining:', routes.length);
+      // Sort routes using sortSegments function
+      routes = routes
+        .map(route => {
+          const [origin, dest] = route.split('-');
+          return { route, origin, dest };
+        })
+        .sort((a, b) => sortSegments(a.origin, a.dest, b.origin, b.dest, currentRoute, segmentOrder))
+        .map(({ route }) => route);
       
-      // Sort routes based on segment sequence
-      routes = routes.sort((a, b) => sortSegments(
-        { route: a },
-        { route: b },
-        [],  // Empty segmentOrder to use default sequence-based sorting
-        currentRoute
-      ));
+      console.log('[DEBUG] After filtering and sorting, routes:', routes);
     }
     
     // Calculate pagination
