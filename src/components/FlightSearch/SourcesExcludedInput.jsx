@@ -108,7 +108,7 @@ const SourcesInput = ({ value = [], onChange, defaultMode = 'include' }) => {
       mode="multiple"
       allowClear
       style={{ width: '100%' }}
-      placeholder={`Select airlines to ${mode}`}
+      placeholder={`Select sources to ${mode}`}
       value={value}
       onChange={handleChange}
       options={sourceOptions}

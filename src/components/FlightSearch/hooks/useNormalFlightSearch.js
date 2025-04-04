@@ -365,11 +365,14 @@ export default function useNormalFlightSearch() {
       
       // Get all available source codenames and filter based on mode
       const allSources = getSourceCodenames();
-      // If mode is 'include', use only the selected sources
+      
+      // If no sources are selected, use all sources
+      // Otherwise, if mode is 'include', use only the selected sources
       // If mode is 'exclude', use all sources except the selected ones
-      const sourcesToUse = sourcesState.mode === 'include' 
-        ? sourcesState.sources 
-        : allSources.filter(source => !sourcesState.sources.includes(source));
+      const sourcesToUse = !sourcesState.sources.length ? allSources :
+        sourcesState.mode === 'include' 
+          ? sourcesState.sources 
+          : allSources.filter(source => !sourcesState.sources.includes(source));
 
       setIsLoading(true);
 
@@ -464,17 +467,33 @@ export default function useNormalFlightSearch() {
       return;
     }
 
-    // Store the original segments for later use (both in state and local var)
+    // Store the original segments for later use, but handle slashes correctly
+    // For segments with slashes (e.g., "HAN/SGN"), we need to keep them as is
+    // This ensures that when comparing routes, we match against the full segment
     routeSegmentsForProcessing = segments;
-    setCurrentRoute(segments);
+    setCurrentRoute(segments.map(segment => {
+      // If this is a group code, expand it
+      if (airportGroups[segment]) {
+        return segment;
+      }
+      // If it contains slashes, keep it as is
+      if (segment.includes('/')) {
+        return segment;
+      }
+      // Otherwise, it's a single airport code
+      return segment;
+    }));
 
     // Get all available source codenames and filter based on mode
     const allSources = getSourceCodenames();
-    // If mode is 'include', use only the selected sources
+    
+    // If no sources are selected, use all sources
+    // Otherwise, if mode is 'include', use only the selected sources
     // If mode is 'exclude', use all sources except the selected ones
-    const sourcesToUse = sourcesState.mode === 'include' 
-      ? sourcesState.sources 
-      : allSources.filter(source => !sourcesState.sources.includes(source));
+    const sourcesToUse = !sourcesState.sources.length ? allSources :
+      sourcesState.mode === 'include' 
+        ? sourcesState.sources 
+        : allSources.filter(source => !sourcesState.sources.includes(source));
 
     console.log('🔍 Sources state:', {
       mode: sourcesState.mode,

@@ -171,70 +171,104 @@ export const getSegmentIndex = (origin, dest, currentRoute) => {
     const fromGroup = currentRoute[i];
     const toGroup = currentRoute[i + 1];
     
-    // Check if the segment belongs to this route segment
-    const fromAirports = airportGroups[fromGroup]?.split('/') || [fromGroup];
-    const toAirports = airportGroups[toGroup]?.split('/') || [toGroup];
+    // Helper function to check if an airport is part of a group/segment
+    const isAirportInGroup = (airport, group) => {
+      // Direct match
+      if (airport === group) return true;
+      
+      // Check if it's part of a slashed segment
+      if (group.includes('/') && group.split('/').includes(airport)) return true;
+      
+      // Check if it's part of an airport group
+      if (airportGroups[group]?.split('/').includes(airport)) return true;
+      
+      return false;
+    };
     
     // If this segment is part of this route section
-    if (fromAirports.includes(origin) && toAirports.includes(dest)) {
+    if (isAirportInGroup(origin, fromGroup) && isAirportInGroup(dest, toGroup)) {
       return i;
     }
   }
   return -1; // Segment not found in route
 };
 
-// Helper function to compare two segments for ordering
-export const compareSegments = (a, b, currentRoute) => {
-  // Get the origin and destination of each route
-  const [aOrigin, aDest] = typeof a === 'string' ? a.split('-') : a.route.split('-');
-  const [bOrigin, bDest] = typeof b === 'string' ? b.split('-') : b.route.split('-');
-  
-  // Get segment indices for both routes
-  const aIndex = getSegmentIndex(aOrigin, aDest, currentRoute);
-  const bIndex = getSegmentIndex(bOrigin, bDest, currentRoute);
-  
-  // Sort by segment index first
-  if (aIndex !== bIndex) {
-    return aIndex - bIndex;
+// Compare and sort segments based on route order
+export const sortSegments = (originA, destA, originB, destB, currentRoute, segmentOrder = []) => {
+  // First check custom order if available
+  if (segmentOrder && segmentOrder.length > 0) {
+    const routeA = `${originA}-${destA}`;
+    const routeB = `${originB}-${destB}`;
+    const indexA = segmentOrder.indexOf(routeA);
+    const indexB = segmentOrder.indexOf(routeB);
+    
+    // If both routes are in the custom order, use that
+    if (indexA !== -1 && indexB !== -1) {
+      return indexA - indexB;
+    }
+    // If only one route is in custom order, prioritize it
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
   }
   
-  // If both routes are in the same segment, sort by exact matches to currentRoute first
-  if (aOrigin === currentRoute[aIndex] && aDest === currentRoute[aIndex + 1]) return -1;
-  if (bOrigin === currentRoute[bIndex] && bDest === currentRoute[bIndex + 1]) return 1;
+  // Get segment indices in the route
+  const indexA = getSegmentIndex(originA, destA, currentRoute);
+  const indexB = getSegmentIndex(originB, destB, currentRoute);
   
-  // Next, prioritize routes where the origin matches the exact origin in currentRoute
-  if (aOrigin === currentRoute[aIndex] && bOrigin !== currentRoute[bIndex]) return -1;
-  if (bOrigin === currentRoute[bIndex] && aOrigin !== currentRoute[aIndex]) return 1;
+  // If both segments are part of the route, sort by their position
+  if (indexA !== -1 && indexB !== -1) {
+    // If they're in different positions, sort by position
+    if (indexA !== indexB) {
+      return indexA - indexB;
+    }
+    // If they're in the same position, sort alphabetically by origin first, then destination
+    if (originA !== originB) {
+      return originA.localeCompare(originB);
+    }
+    return destA.localeCompare(destB);
+  }
   
-  // Next, prioritize routes where the destination matches the exact destination in currentRoute
-  if (aDest === currentRoute[aIndex + 1] && bDest !== currentRoute[bIndex + 1]) return -1;
-  if (bDest === currentRoute[bIndex + 1] && aDest !== currentRoute[aIndex + 1]) return 1;
+  // If only one segment is part of the route, prioritize it
+  if (indexA !== -1) return -1;
+  if (indexB !== -1) return 1;
   
-  // For routes in the same segment group with no exact matches, sort alphabetically
-  const routeA = typeof a === 'string' ? a : a.route;
-  const routeB = typeof b === 'string' ? b : b.route;
-  return routeA.localeCompare(routeB);
+  // If neither segment is part of the route, check if origins match route segments
+  const originAMatchIndex = currentRoute.findIndex(segment => isAirportInGroup(originA, segment));
+  const originBMatchIndex = currentRoute.findIndex(segment => isAirportInGroup(originB, segment));
+  
+  if (originAMatchIndex !== -1 || originBMatchIndex !== -1) {
+    if (originAMatchIndex === -1) return 1;
+    if (originBMatchIndex === -1) return -1;
+    // If they match at different positions, sort by position
+    if (originAMatchIndex !== originBMatchIndex) {
+      return originAMatchIndex - originBMatchIndex;
+    }
+    // If they match at the same position, sort alphabetically
+    if (originA !== originB) {
+      return originA.localeCompare(originB);
+    }
+    return destA.localeCompare(destB);
+  }
+  
+  // If no other criteria matches, sort alphabetically by origin first, then destination
+  if (originA !== originB) {
+    return originA.localeCompare(originB);
+  }
+  return destA.localeCompare(destB);
 };
 
-// When sorting validFlights
-export const sortSegments = (a, b, segmentOrder, currentRoute) => {
-  // Use custom order if available
-  if (segmentOrder.length > 0) {
-    const aIndex = segmentOrder.indexOf(a.route);
-    const bIndex = segmentOrder.indexOf(b.route);
-    
-    // If both routes are in our order, use that order
-    if (aIndex !== -1 && bIndex !== -1) {
-      return aIndex - bIndex;
-    }
-    
-    // If only one route is in our order, prioritize it
-    if (aIndex !== -1) return -1;
-    if (bIndex !== -1) return 1;
-  }
+// Helper function to check if an airport is part of a group/segment
+const isAirportInGroup = (airport, group) => {
+  // Direct match
+  if (airport === group) return true;
   
-  // Use the common segment comparison function
-  return compareSegments(a, b, currentRoute);
+  // Check if it's part of a slashed segment
+  if (group.includes('/') && group.split('/').includes(airport)) return true;
+  
+  // Check if it's part of an airport group
+  if (airportGroups[group]?.split('/').includes(airport)) return true;
+  
+  return false;
 };
 
 // Get the full airline name from source codename
